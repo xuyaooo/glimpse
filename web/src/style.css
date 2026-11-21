@@ -1,92 +1,305 @@
 @import "tailwindcss";
-@import "@fontsource/andika/400.css";
-@import "@fontsource/andika/700.css";
+@import "@fontsource-variable/nunito";
+@import "@fontsource/caveat/600.css";
+@import "@fontsource/caveat/700.css";
 @import "@fontsource/kalam/400.css";
 
 /*
-  Glimpse design tokens. The child's screens are a page of squared exercise-book paper:
-  blue fountain-pen ink for ticks and actions, an orange marker for mistakes (never red),
-  graphite for text. Andika was designed by SIL for children learning to read: single-storey
-  a and g, and 1 / l / I that can't be confused, in many scripts.
+  Glimpse, desk edition. A sunny Swiss study desk: sky, lagoon-teal sidebar with hills,
+  white cards. Two kinds of handwriting with two jobs:
+    Caveat  the tutor's blue marker on the whiteboard and sticky notes
+    Kalam   the child's pencil, in what the camera sees
+  Status colours always come with an icon and a word, never colour alone.
 */
 @theme {
-  --font-sans: "Andika", ui-sans-serif, system-ui, sans-serif;
-  --font-hand: "Kalam", cursive;
+  --font-sans: "Nunito Variable", "Nunito", ui-rounded, system-ui, sans-serif;
+  --font-marker: "Caveat", cursive;
+  --font-pencil: "Kalam", cursive;
   --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
 
+  --color-air: #eaf5fc;
+  --color-ink: #18294a;
+  --color-ink-2: #5b6b84;
+  --color-ink-3: #8a97ab;
+  --color-line: #e3ebf3;
+  --color-line-2: #eef3f8;
+
+  --color-lagoon: #0f7f76;
+  --color-lagoon-deep: #0b6962;
+  --color-lagoon-bright: #14a096;
+  --color-lagoon-soft: #d5f0ec;
+  --color-lagoon-mist: #ecf8f6;
+
+  --color-marker: #1f5fd6;
+  --color-marker-soft: #e8f0fe;
+  --color-sun: #ffc93c;
+  --color-note: #ffe680;
+  --color-tangerine: #f47a2a;
+  --color-tangerine-soft: #ffeadb;
+  --color-violet: #7c5ce8;
+  --color-violet-soft: #efeaff;
+
+  --color-right: #136e43;
+  --color-right-bg: #e5f6ec;
+  --color-right-mark: #22a06b;
+  --color-wrong: #c2303a;
+  --color-wrong-bg: #fdecee;
+  --color-wrong-mark: #e5484d;
+
+  --color-stage: #0d2230;
   --color-paper: #ffffff;
-  --color-desk: #f2f4f7;
-  --color-grid: #dfe7f6;
-  --color-grid-fine: #e6ecf5;
-  --color-ink: #12141a;
-  --color-ink-2: #4a5160;
-  --color-line: #dce0e7;
-  --color-line-soft: #eceff3;
-  --color-rule: #c9d0db;
-  --color-mute: #e9ecf1;
 
-  --color-pen: #2452cc;
-  --color-pen-deep: #1a3c99;
-  --color-pen-soft: #e6edfc;
-  --color-pen-pale: #dce4f7;
-
-  --color-marker: #e8620f;
-  --color-marker-ink: #a8430a;
-  --color-marker-soft: #fdebdd;
-  --color-marker-pale: #fbe0cb;
-
-  --color-stage: #0e1014;
-  --color-table: #2a2723;
-}
-
-@utility bg-squared {
-  background-color: var(--color-paper);
-  background-image:
-    linear-gradient(var(--color-grid) 1px, transparent 1px),
-    linear-gradient(90deg, var(--color-grid) 1px, transparent 1px);
-  background-size: 24px 24px;
-}
-
-@utility bg-squared-fine {
-  background-color: var(--color-paper);
-  background-image:
-    linear-gradient(var(--color-grid-fine) 1px, transparent 1px),
-    linear-gradient(90deg, var(--color-grid-fine) 1px, transparent 1px);
-  background-size: 22px 22px;
+  --animate-rise: rise 700ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  --animate-pop: pop 520ms cubic-bezier(0.3, 1.6, 0.5, 1) both;
+  --animate-bob: bob 3.2s ease-in-out infinite alternate;
+  --animate-drift: drift 46s ease-in-out infinite alternate;
+  --animate-sun: spin 28s linear infinite;
+  --animate-shimmer: shimmer 1.4s linear infinite;
 }
 
 @layer base {
   html {
     color: var(--color-ink);
+    background: #f8fbfe;
     -webkit-font-smoothing: antialiased;
   }
   :focus-visible {
-    outline: 3px solid var(--color-pen);
+    outline: 3px solid var(--color-marker);
     outline-offset: 2px;
+    border-radius: 10px;
   }
   button,
   [role="button"] {
     cursor: pointer;
   }
+  ::selection {
+    background: var(--color-lagoon-soft);
+  }
 }
 
-/* The one orchestrated motion: the marker circling a mistake, like a teacher would. */
-.draw-in {
-  stroke-dasharray: 1;
-  stroke-dashoffset: 1;
-  animation: draw-in 650ms ease-out 120ms forwards;
+/* Panels sit on the sky like paper cards on a desk. */
+@utility card {
+  background: rgb(255 255 255 / 0.94);
+  border: 1px solid rgb(255 255 255 / 0.9);
+  border-radius: 26px;
+  box-shadow:
+    0 18px 40px -22px rgb(24 41 74 / 0.28),
+    0 2px 6px rgb(24 41 74 / 0.05);
+  backdrop-filter: blur(10px);
 }
-@keyframes draw-in {
+
+@utility bg-board {
+  background-color: #fff;
+  background-image: radial-gradient(#dfe7f2 1.1px, transparent 1.1px);
+  background-size: 20px 20px;
+}
+
+@utility bg-squared-fine {
+  background-color: #fff;
+  background-image:
+    linear-gradient(#e6ecf5 1px, transparent 1px),
+    linear-gradient(90deg, #e6ecf5 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+
+@utility btn-lagoon {
+  background-image: linear-gradient(180deg, #13968b 0%, #0f7f76 55%, #0b6962 100%);
+  color: #fff;
+  box-shadow:
+    0 10px 22px -10px rgb(15 127 118 / 0.75),
+    inset 0 1px 0 rgb(255 255 255 / 0.25);
+}
+
+/* ---------------------------------------------------------------- motion */
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(18px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.12);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+@keyframes bob {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(-5px);
+  }
+}
+@keyframes drift {
+  from {
+    transform: translateX(-30px);
+  }
+  to {
+    transform: translateX(50px);
+  }
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes shimmer {
+  from {
+    background-position: -200% 0;
+  }
+  to {
+    background-position: 200% 0;
+  }
+}
+@keyframes blink {
+  0%,
+  44%,
+  50%,
+  100% {
+    transform: scaleY(1);
+  }
+  47% {
+    transform: scaleY(0.12);
+  }
+}
+@keyframes wave-arm {
+  from {
+    transform: rotate(-8deg);
+  }
+  to {
+    transform: rotate(18deg);
+  }
+}
+@keyframes flag {
+  from {
+    transform: skewY(-5deg) scaleX(0.94);
+  }
+  to {
+    transform: skewY(5deg) scaleX(1);
+  }
+}
+@keyframes draw {
   to {
     stroke-dashoffset: 0;
   }
 }
-
-.wave-bar {
-  transform-origin: bottom;
-  animation: wave 900ms ease-in-out infinite;
+@keyframes write-on {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
 }
-@keyframes wave {
+@keyframes sweep {
+  0% {
+    top: 4%;
+  }
+  100% {
+    top: 92%;
+  }
+}
+@keyframes lock {
+  from {
+    opacity: 0;
+    transform: scale(1.25);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+@keyframes confetti {
+  0% {
+    opacity: 1;
+    transform: translate(0, 0) rotate(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(var(--x), var(--y)) rotate(var(--r));
+  }
+}
+@keyframes pulse-ring {
+  0% {
+    box-shadow: 0 0 0 0 rgb(20 160 150 / 0.5);
+  }
+  100% {
+    box-shadow: 0 0 0 16px rgb(20 160 150 / 0);
+  }
+}
+@keyframes shine {
+  from {
+    transform: translateX(-120%) skewX(-20deg);
+  }
+  to {
+    transform: translateX(260%) skewX(-20deg);
+  }
+}
+@keyframes wiggle {
+  0%,
+  100% {
+    transform: rotate(-4deg);
+  }
+  50% {
+    transform: rotate(-1.5deg);
+  }
+}
+@keyframes float-up {
+  0% {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  20% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-26px);
+  }
+}
+@keyframes grow-y {
+  from {
+    transform: scaleY(0);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+@keyframes hop {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0);
+  }
+  40% {
+    transform: translateY(-10px) rotate(-8deg);
+  }
+  60% {
+    transform: translateY(-10px) rotate(8deg);
+  }
+}
+@keyframes float-sym {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0);
+  }
+  50% {
+    transform: translateY(-8px) rotate(10deg);
+  }
+}
+@keyframes wave-bar {
   0%,
   100% {
     transform: scaleY(0.35);
@@ -94,6 +307,80 @@
   50% {
     transform: scaleY(1);
   }
+}
+
+/* An SVG stroke that draws itself: add pathLength="1". Tune with --dur / --delay. */
+.draw {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: draw var(--dur, 0.8s) ease-out var(--delay, 0s) forwards;
+}
+/* `backwards`, not `both`: once written, the clip goes away so circles and fingers can overflow. */
+.write-on {
+  animation: write-on var(--dur, 0.9s) steps(24, end) var(--delay, 0s) backwards;
+}
+.svg-center {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.shimmer {
+  background: linear-gradient(90deg, #eef3f8 25%, #dfe9f3 50%, #eef3f8 75%);
+  background-size: 200% 100%;
+  animation: var(--animate-shimmer);
+}
+.stagger {
+  animation: var(--animate-rise);
+  animation-delay: var(--d, 0ms);
+}
+.wave-bar {
+  transform-origin: bottom;
+  animation: wave-bar 900ms ease-in-out infinite;
+}
+
+/* Vue transitions */
+.modal-enter-active,
+.modal-leave-active {
+  transition: opacity 260ms ease;
+}
+.modal-enter-active .modal-window,
+.modal-leave-active .modal-window {
+  transition: transform 360ms cubic-bezier(0.2, 0.9, 0.25, 1.15), opacity 260ms ease;
+}
+.modal-enter-from,
+.modal-leave-to {
+  opacity: 0;
+}
+.modal-enter-from .modal-window,
+.modal-leave-to .modal-window {
+  opacity: 0;
+  transform: translateY(24px) scale(0.96);
+}
+.list-enter-active {
+  transition: all 520ms cubic-bezier(0.2, 0.9, 0.25, 1.1);
+}
+.list-leave-active {
+  transition: all 260ms ease;
+  position: absolute;
+}
+.list-enter-from {
+  opacity: 0;
+  transform: translateY(-14px) scale(0.97);
+}
+.list-leave-to {
+  opacity: 0;
+  transform: translateX(20px);
+}
+.list-move {
+  transition: transform 420ms cubic-bezier(0.2, 0.9, 0.25, 1);
+}
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 240ms ease, transform 300ms ease;
+}
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+  transform: translateY(6px);
 }
 
 @media (prefers-reduced-motion: reduce) {

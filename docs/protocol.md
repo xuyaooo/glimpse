@@ -1,42 +1,45 @@
-# Web ↔ engine protocol
+# What the web app expects from the engine
 
-One WebSocket at `/ws`, JSON messages with a `type`. Types are mirrored in `web/src/lib/types.ts`; the demo engine (`web/src/lib/demo.ts`) and the real engine (`engine/glimpse_engine/server.py`) speak the same language.
+One WebSocket at `/ws`, JSON messages with a `type`. The shapes are in `web/src/lib/types.ts`; `web/src/lib/demo.ts` is a working reference that sends exactly these events. Build the engine against this.
 
-Fractions are always sent exactly as written, never reduced: `{"n": 4, "d": 6}`.
+> `engine/` is still the v1 prototype and speaks the **old** protocol. While it's running, the web app connects to it and won't work. Stop it (or update it to this protocol) and the web app falls back to demo mode.
+
+Maths travels as LaTeX: `\frac{3}{4}+\frac{1}{2}=\frac{4}{6}`. Fractions are never reduced: 4/6 is evidence, 2/3 is not.
 
 ## Web → engine
 
 | type | fields | when |
 |---|---|---|
-| `session_start` | `student`, `worksheet`, `lang` | "Start writing" on Setup, "Another round" |
-| `check` | | thumb button / C: read and check the line the child just finished |
-| `check_typed` | `problem`, `answer` (text such as `"4/6"`) | development: drive the checker without a camera |
-| `ask_start` | | side button pressed: start recording and tracking the fingertip |
-| `ask_end` | | side button released: answer the question |
-| `confirm_reply` | `problem`, `ok` | child answered "Did you write …?" |
-| `session_end` | | "I'm done" |
+| `session_start` | `student`, `name`, `lang`, `subject` | a child is picked. `subject`: `maths`, `reading` or `science` |
+| `subject` | `subject` | the child picked another subject under *Choose a practice*; check that subject from now on |
+| `cut_part` | `image?` | "this line is finished, read it now": the browser saw the pencil lift (or a key / button was pressed). `image` is a JPEG data URL of the whole camera frame, already the right way up. **The browser owns the camera** (`getUserMedia`); the engine never opens it |
+| `part_typed` | `text` | development: type a part (`"3/4 + 1/2 = 4/6"`) instead of writing it |
+| `confirm_reply` | `partId`, `ok` | the child answered "Did you write this?" |
+| `pick_exercise` | `id` | the child chose the next similar exercise |
+| `ask_start` / `ask_end` | | manual trigger for a question (the engine normally detects pointing + speech itself) |
+| `question_typed` | `text`, `partId?` | development: ask without speech |
+| `session_end` | | "End session" |
 
 ## Engine → web
 
-| type | fields | effect in the app |
+| type | fields | effect |
 |---|---|---|
-| `hello` | `version`, `camera` | connected. `camera: false` = show the drawn worksheet instead of video |
+| `hello` | `version`, `camera` | connected (`camera` is no longer used: the browser opens the camera itself) |
 | `status` | `state`: `idle`, `watching`, `reading`, `thinking`, `listening`, `answering` | status pill |
-| `setup` | `checks`: `{camera, markers, light, button, mic}`, each `{ok: true / false / null, detail}` | Setup checklist |
-| `worksheet` | `id`, `problems: [{id, a, b}]` | resets the session |
-| `progress` | `current` | "Problem 2 of 6" |
-| `written` | `problem`, `answer` | what the reader read (drawn in handwriting in demo mode) |
-| `mark` | `mark: {problem, verdict, label?, box?}` | tick (`correct`), orange circle + label (`wrong`), dashed box (`next`). `box` = `[x, y, w, h]` in normalised camera coordinates, for drawing over the video |
-| `explain` | `explanation` or `null` | the visual explanation; `null` clears it |
-| `hint` | `hint: {text, lang, translation?}` or `null` | footer text, read aloud |
-| `confirm` | `problem`, `guess` | "Did you write 5/8?" Yes / No |
-| `transcript` | `ask: {text, lang, final, pointedAt?: {problem, token}}` | live transcript while asking; highlights the pointed token |
-| `answer` | `explanation` or `null`, `hint` | the answer to a spoken question |
-| `insight` | `insight: {text, evidence}` | "What clicked today" on the summary |
+| `part` | `part`: `{id, latex, confidence, verdict, note?, exerciseId?, box?, at}` | adds or updates a line under *What you wrote*. `verdict`: `reading` → `correct` / `wrong` / `unsure`. `box` = `[x, y, w, h]` normalised to the frame the browser sent, to draw the outline, tick or circle on the video. Without `box`, the web app uses the line slots of the printed sheet (`/worksheet`, `web/src/lib/geometry.ts`) |
+| `confirm` | `partId`, `latex` | "Did you write this?" Yes / No |
+| `teach` | `teaching` or `null` | *Let's see why*: `{partId, misconception: {id, name}, style, iteration, why, title, visual, steps}`. `null` clears it |
+| `exercises` | `items: [{id, latex, target?}]`, `currentId?` | *Try a similar one* in the camera window, the desk's *Next step* and bell, and "N to try" on the current subject |
+| `profile` | `profile: {style: {tries, wins}}` | the child's teaching profile (shown on the dashboard) |
+| `hint` | `hint: {text, lang, translation?}` or `null` | what Glimpse says, shown and spoken |
+| `question` | `question: {text, lang, final, pointedAt?: {partId, token}}` | live transcript and pointed target |
+| `answer` | `answer: {text, lang, translation?, visual?}` | the answer to a question |
 
-## Visual
+`style` is one of `pictures`, `bars`, `steps`, `number_line`. `name` in a misconception is phrased to follow "you", e.g. `added the tops and the bottoms`.
 
-The AI never writes drawing code. It picks a scene and fills in numbers; the engine checks every number before sending.
+## Visual scenes
+
+The AI never writes drawing code. It picks a scene and fills in numbers; the engine checks every number first.
 
 ```json
 { "kind": "compare_pies",
@@ -45,9 +48,13 @@ The AI never writes drawing code. It picks a scene and fills in numbers; the eng
   "right": { "n": 3, "d": 4, "label": "3/4 on its own", "tone": "pen" } }
 
 { "kind": "bar_model",
-  "rows": [ { "n": 3, "d": 4, "label": "3/4", "tone": "pen" },
-            { "n": 1, "d": 2, "label": "1/2", "tone": "marker" },
-            { "n": 2, "d": 4, "label": "2/4", "tone": "marker", "note": "cut the half into quarters" } ] }
+  "rows": [ { "n": 2, "d": 5, "label": "2/5", "tone": "pen" },
+            { "n": 6, "d": 15, "label": "6/15", "tone": "pen", "note": "cut both into fifteenths" } ] }
+
+{ "kind": "worked", "caption": "The same kind of problem, worked out",
+  "lines": [ "\\frac{1}{3}+\\frac{1}{6}", "=\\frac{2}{6}+\\frac{1}{6}", "=\\frac{3}{6}" ] }
 ```
 
-New scene kinds (number line, balance scale for equations) are added in both `types.ts` and `ExplainPanel.vue`.
+## Dashboard API
+
+`GET /api/students` returns a list of `StudentSummary` (shape in `web/src/lib/mock.ts`). Without it, the dashboard uses this browser's session plus sample data.

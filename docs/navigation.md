@@ -1,56 +1,72 @@
 # Navigating Glimpse
 
-Two modes. The **child** never sees a menu: the paper, one mouse button and their voice drive everything. **Adults** (teacher, NGO, jury) get a top navigation, reached through "Teacher area" on the start screen.
+Three pages in the sidebar, plus the camera window.
+
+| Sidebar | Route | Who |
+|---|---|---|
+| Home | `/` | the child (picks their name the first time) |
+| My work | `/work` | the child: past exercises and the reasoning behind each |
+| Tutor view | `/dashboard/:student` | tutor, teacher, parent, NGO. "End session" also opens it |
+| (Continue / Open camera) | `/scan` | the camera as a whole window |
+
+## Home
 
 ```
-CHILD (full screen, no menus)
-
-  /  Start ──tap a name──▶ /setup  Setup check ──Start writing──▶ /desk  Desk ──Finish──▶ /summary  Summary
-  ▲                                                                │  ▲                          │
-  │                                                     hold A /   │  │  let go                  │
-  │                                                     side button▼  │                          │
-  │                                                          Asking a question                   │
-  │                                                          (a state of /desk, not a page)      │
-  └─────────────────────────────── "I'm done" ◀────────────────────────────────────────────────┤
-                                                        "Another round" ──▶ /desk ◀─────────────┘
-
-ADULTS (top navigation: Class · Misconceptions · System and cost · Back to the desk)
-
-  /  ──Teacher area──▶ /teacher  Class overview ──pick a child──▶ /teacher/students/:id  Child detail
-                       /teacher/misconceptions   Misconception library
-                       /teacher/system           System and cost
+┌ sidebar ┐                                                  [search] [bell] (A)
+│ Home    │ Good evening, Amara! 👋                      Alps, pine forests, Glim
+│ My work │ It clicked! Keep going.                       holding a star
+│ Tutor   │ ┌ ring: right today │ right in a row │ points ┐ ▂▄▆█
+│ view    │ └──────────────────────────────────────────────┘   ┌ Choose a practice ─┐
+│         │ ┌ Continue your practice ············ View all → ┐ │ Maths   3 to try  ✓│
+│  Alps   │ │ the paper on the desk   Maths                  │ │ Reading           >│
+│  + flag │ │                         Adding fractions       │ │ Science           >│
+│ Level 2 │ │                         4 lines in 6 min ●●●●  │ └────────────────────┘
+│ ▓▓▓░░░  │ │                         [ ▶ Continue ]         │ ┌ Your achievements ─┐
+└─────────┘ └────────────────────────────────────────────────┘ │ ★  ▣  ♛  🔒        │
+                                                               └────────────────────┘
 ```
 
-## Routes
+- **Continue** (Start before the first line) opens the camera window. With nobody picked yet it asks who's writing first.
+- **Choose a practice**: pick the subject, Maths, Reading or Science. *Continue your practice*, the breadcrumb on My work and the camera window follow it, and the engine is told (`subject`). After a mistake, the current subject shows how many similar exercises are waiting ("3 to try").
+- **Your achievements**: First tick, Fixed it (right after a mistake), 3 in a row, Curious (asked a question). Locked ones are grey with a padlock.
+- **Level** (sidebar): 10 points per right line, a new level every 50.
+- **View all** and the search box go to My work. The bell opens the camera on the next similar exercise.
 
-| Route | Screen | Who | Reached from | Goes to |
-|---|---|---|---|---|
-| `/` | Start: who's at the desk? | child | app open, "I'm done" | Setup (tap a name), Teacher area |
-| `/setup` | Setup check: camera, markers, light, button, mic, worksheet, language | child + adult, once per session | Start | Desk ("Start writing"), back to Start |
-| `/desk` | Desk: live paper, explanation, spoken hint | child | Setup, "Another round" | Summary ("Finish") |
-| `/desk` while asking | Desk: pointing + listening state | child | hold A / side button | back to Desk on release |
-| `/summary` | What clicked today, problems done | child | Desk | Desk ("Another round"), Start ("I'm done") |
-| `/teacher` | Class overview: written weekly summary, children table, who needs you, common misconceptions | adult | Start ("Teacher area", "Add a child") | Child detail, Library |
-| `/teacher/students/:id` | Child detail: skills, misconception timeline, sessions | adult | Class overview (child's name) | breadcrumb back to Class |
-| `/teacher/misconceptions` | Misconception library: each bug as code, AI-found ones to approve | adult | top nav, "Open the misconception library" | |
-| `/teacher/system` | System and cost: the cascade, cost per hour, latency, every big-model call | adult, jury | top nav | |
+## The camera window (`/scan`)
 
-Rules:
+- Full screen button; Esc or "Home" goes back.
+- **Left, live camera** (the MX Brio, opened by the browser). The line being read lights up; a right line gets a tick, a wrong one an orange circle. The tutor draws next to the paper: an arrow to **pizzas** (pictures) or **chocolate bars** (fraction bars) or a sticky-note worked example, with the current step written underneath. Answers to questions are drawn there too. Below the picture: every line the camera captured.
+- **Right, digital**: what the camera saw for the line (a crop of the real handwriting) → what was read, typeset, with how sure the reader is; right or not yet and why; **What's going on** in plain words; the explanation steps in time with the drawing; similar exercises; every line.
+- Top bar: pick the camera, **Read when I lift my pencil** (the browser notices the pencil stop moving; on by default with a real engine, off in demo mode), turn the picture upside down, print the sheet, full screen.
+- It opens by itself when the reader isn't sure ("Did you write this?") or when the child starts asking.
 
-- `/setup`, `/desk` and `/summary` need a chosen child. Without one they go back to `/`. While developing, add `?student=amara` to open them directly.
-- Unknown URLs go to `/`.
-- The teacher area keeps "Class" highlighted on a child's page, since that's where it lives.
+## My work (`/work`)
 
-## Inputs on the Desk
+- **Past exercises**: every line, newest first, right or not yet, with the reason. Pick one and the whiteboard redraws the reasoning given for it, step by step.
+- **Summary / Explanation**: what we learned and key ideas; which teaching style was used and why ("Pictures didn't click yet, so this time: fraction bars"), what works for this child, and *Next step* (the next similar exercise).
+- Open camera and End session sit next to the breadcrumb.
+
+## Inputs
 
 | Input | What it does |
 |---|---|
-| Lifting the pen and pausing (engine, later) | The line is read and checked automatically |
-| Thumb button (`C`, or `Space`) | "Check my line" now |
-| Holding the side button (`A`) | Listen while pointing at the paper. Letting go sends the question |
-| Pointing with a finger | Chooses what the question is about. The paper highlights it |
-| "Did you write 5/8?" Yes / No | Shown when the reader isn't sure, before anything is sent to a big model |
-| "Show me the next step" | Steps through the explanation |
-| Speaker button | Says the hint again |
+| `W`, `C` or `Space`, or "Read my line now" | in the camera window: this line is finished, read it now. On Home or My work: open the camera |
+| hold `A`, or "Hold to ask" | point at the paper and ask; letting go sends the question |
+| `Esc` or "Home" | leave the camera window |
+| avatar (top right) | change who's writing |
 
-The engine decides what the screen shows by sending events (see [protocol.md](protocol.md)); the web app never decides whether an answer is right.
+The engine detects finished lines (pencil lifted) and questions (finger pointing + speech) by itself; these are the manual fallbacks and drive demo mode.
+
+## Handy URLs
+
+| URL | What it does |
+|---|---|
+| `/?demo` | demo mode without waiting for an engine |
+| `/?demo&student=amara` | skip the name picker |
+| `/?demo&student=amara&autoplay` | hands-free: writes a line every few seconds (booth, backup video). Works on `/work` too |
+| `/scan?demo&student=amara` | the camera window directly; add `&autoplay` for hands-free, `&paper` for the drawn paper instead of the camera |
+| `/worksheet` | the printable A4 sheet: its lines sit where the camera frame expects them |
+
+## Tutor view
+
+Students on the left ("Now" for the child in this session, "Needs you" when a mistake keeps coming back). For the chosen student: a written summary with today's ring and numbers; what they wrote; what teaching works for them; misconceptions (fixed or still working on it); what to practise next; AI usage; questions they asked; sessions.

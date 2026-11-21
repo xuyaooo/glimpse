@@ -6,8 +6,6 @@ declare module 'vue-router' {
   interface RouteMeta {
     /** Shown in the browser tab. */
     title?: string
-    /** Child screens that make no sense without a chosen child. */
-    needsStudent?: boolean
   }
 }
 

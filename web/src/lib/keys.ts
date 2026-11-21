@@ -1,18 +1,20 @@
 import { onBeforeUnmount, onMounted } from 'vue'
 
 /*
-  The MX Master 4 is mapped in Logi Options+ to plain keystrokes:
-    thumb button        → C   "check my line"
-    gesture/side button → A   "ask a question" (hold while speaking)
-  Space also checks, for keyboards. If Options+ only sends a quick tap instead of holding
-  the key down, a short press toggles listening on, and the next press turns it off.
+  The engine detects both things on its own: a finished part (pencil lifted, ink settled)
+  and a question (finger pointing + speech). These keys are the manual fallback, and what
+  drives the demo. An MX Master button can be mapped to them in Logi Options+.
+    W, C or Space  "this part is finished, read it now"
+    A (hold)       "I'm pointing and asking"
+  If a button only sends a quick tap rather than holding the key, a short press starts
+  listening and the next press stops it.
 */
-export const CHECK_KEYS = ['KeyC', 'Space']
+export const CUT_KEYS = ['KeyW', 'KeyC', 'Space']
 export const ASK_KEYS = ['KeyA']
 const TAP_MS = 250
 
 interface Handlers {
-  check: () => void
+  cut: () => void
   askStart: () => void
   askEnd: () => void
 }
@@ -21,18 +23,19 @@ function isTyping(target: EventTarget | null) {
   return target instanceof HTMLElement && !!target.closest('input, textarea, select, [contenteditable="true"]')
 }
 
-export function useMouseButtons(handlers: Handlers) {
-  let asking = false
-  let toggled = false
-  let downAt = 0
+// Shared by every page, so holding A on the desk and letting go on the camera page still works.
+let asking = false
+let toggled = false
+let downAt = 0
 
+export function useManualTriggers(handlers: Handlers) {
   function onKeyDown(e: KeyboardEvent) {
     if (e.metaKey || e.ctrlKey || e.altKey || isTyping(e.target)) return
-    if (CHECK_KEYS.includes(e.code)) {
-      // Space on a focused button should press that button, not check the line.
+    if (CUT_KEYS.includes(e.code)) {
+      // Space on a focused button should press that button.
       if (e.code === 'Space' && e.target instanceof HTMLButtonElement) return
       e.preventDefault()
-      if (!e.repeat) handlers.check()
+      if (!e.repeat) handlers.cut()
     } else if (ASK_KEYS.includes(e.code)) {
       e.preventDefault()
       if (e.repeat) return
