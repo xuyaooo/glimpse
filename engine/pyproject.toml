@@ -1,0 +1,32 @@
+[project]
+name = "glimpse-engine"
+version = "0.1.0"
+description = "Glimpse tutor engine: camera, handwriting, step checking, misconception diagnosis"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+]
+
+[project.optional-dependencies]
+# Install what your part of the pipeline needs, e.g. `uv sync --extra vision`.
+vision = ["opencv-contrib-python>=4.10", "mediapipe>=0.10", "numpy>=1.26"]
+math = ["sympy>=1.13"]
+# faster-whisper runs on the CPU only on a Mac; mlx-whisper uses the Apple GPU.
+speech = [
+    "mlx-whisper>=0.4; sys_platform == 'darwin'",
+    "faster-whisper>=1.1; sys_platform != 'darwin'",
+]
+
+[dependency-groups]
+dev = ["pytest>=8", "httpx>=0.27"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["glimpse_engine"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

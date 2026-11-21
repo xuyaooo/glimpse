@@ -1,0 +1,108 @@
+@import "tailwindcss";
+@import "@fontsource/andika/400.css";
+@import "@fontsource/andika/700.css";
+@import "@fontsource/kalam/400.css";
+
+/*
+  Glimpse design tokens. The child's screens are a page of squared exercise-book paper:
+  blue fountain-pen ink for ticks and actions, an orange marker for mistakes (never red),
+  graphite for text. Andika was designed by SIL for children learning to read: single-storey
+  a and g, and 1 / l / I that can't be confused, in many scripts.
+*/
+@theme {
+  --font-sans: "Andika", ui-sans-serif, system-ui, sans-serif;
+  --font-hand: "Kalam", cursive;
+  --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+
+  --color-paper: #ffffff;
+  --color-desk: #f2f4f7;
+  --color-grid: #dfe7f6;
+  --color-grid-fine: #e6ecf5;
+  --color-ink: #12141a;
+  --color-ink-2: #4a5160;
+  --color-line: #dce0e7;
+  --color-line-soft: #eceff3;
+  --color-rule: #c9d0db;
+  --color-mute: #e9ecf1;
+
+  --color-pen: #2452cc;
+  --color-pen-deep: #1a3c99;
+  --color-pen-soft: #e6edfc;
+  --color-pen-pale: #dce4f7;
+
+  --color-marker: #e8620f;
+  --color-marker-ink: #a8430a;
+  --color-marker-soft: #fdebdd;
+  --color-marker-pale: #fbe0cb;
+
+  --color-stage: #0e1014;
+  --color-table: #2a2723;
+}
+
+@utility bg-squared {
+  background-color: var(--color-paper);
+  background-image:
+    linear-gradient(var(--color-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--color-grid) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+@utility bg-squared-fine {
+  background-color: var(--color-paper);
+  background-image:
+    linear-gradient(var(--color-grid-fine) 1px, transparent 1px),
+    linear-gradient(90deg, var(--color-grid-fine) 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+
+@layer base {
+  html {
+    color: var(--color-ink);
+    -webkit-font-smoothing: antialiased;
+  }
+  :focus-visible {
+    outline: 3px solid var(--color-pen);
+    outline-offset: 2px;
+  }
+  button,
+  [role="button"] {
+    cursor: pointer;
+  }
+}
+
+/* The one orchestrated motion: the marker circling a mistake, like a teacher would. */
+.draw-in {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: draw-in 650ms ease-out 120ms forwards;
+}
+@keyframes draw-in {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.wave-bar {
+  transform-origin: bottom;
+  animation: wave 900ms ease-in-out infinite;
+}
+@keyframes wave {
+  0%,
+  100% {
+    transform: scaleY(0.35);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

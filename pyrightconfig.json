@@ -1,0 +1,5 @@
+{
+  "venvPath": "engine",
+  "venv": ".venv",
+  "extraPaths": ["engine"]
+}

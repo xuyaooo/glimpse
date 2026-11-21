@@ -1,0 +1,27 @@
+# Node
+node_modules/
+dist/
+*.local
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Models, datasets, recordings: too big for git, share them another way
+engine/models/
+engine/data/
+*.onnx
+*.safetensors
+*.mp4
+
+# Secrets (OpenRouter key goes in engine/.env)
+.env
+.env.*
+
+# OS / editors
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
