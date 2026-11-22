@@ -72,6 +72,14 @@ export const sum = (a: [number, number], b: [number, number], ans?: [number, num
 const MATH_WORDS = /^(sin|cos|tan|log|lim|sqrt|frac|dfrac|int|exp|ln|cases|begin|end|text|times|div|cdot|infty|circ|binom|left|right|dx|dy|to|pi|le|ge|leq|geq|neq|approx|underbrace|quad)$/i
 // written without a backslash, these are still maths (sin x, dx)
 const FUNCTIONS = /^(sin|cos|tan|log|ln|lim|exp|dx|dy|dt)$/i
+/** The words of an exercise that is only words ("\text{How long does it take ...?}"), to show as
+ * text that wraps instead of one long formula; '' when it has maths in it. */
+export function wordsOnly(latex: string | undefined | null) {
+  const t = titleTex(latex).trim()
+  const m = /^\\text\{([^{}]*)\}$/.exec(t)
+  return m ? m[1].replace(/\\([%&#$_])/g, '$1').replace(/\\textasciicircum\{\}/g, '^').trim() : ''
+}
+
 export function titleTex(about: string | undefined | null) {
   const t = String(about ?? '').trim()
   if (!t || t.includes('\\text{')) return t

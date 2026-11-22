@@ -51,7 +51,7 @@ Three pages in the sidebar, plus the camera window.
 
 | Input | What it does |
 |---|---|
-| `W`, `C` or `Space`, or "Read my line now" | in the camera window: this line is finished, read it now. On Home or My work: open the camera |
+| `W`, `C` or `Space`, or "Check my whole sheet" | in the camera window: check every exercise on the sheet. On Home or My work: open the camera |
 | hold `A`, or "Hold to ask" | point at the paper and ask; letting go sends the question |
 | `Esc` or "Home" | leave the camera window |
 | avatar (top right) | change who's writing |

@@ -5,8 +5,9 @@
 // (worked solution + animation) and "See it" (the line in the other tab).
 import { computed, ref, watch } from 'vue'
 import MathTex from '../MathTex.vue'
-import { titleTex } from '@/lib/latex'
+import { titleTex, wordsOnly } from '@/lib/latex'
 import { itemName, youNote } from '@/lib/sheet'
+import { SUBJECTS } from '@/lib/subjects'
 import { speak } from '@/lib/speech'
 import type { SheetItem, SheetReport, WrittenPart } from '@/lib/types'
 
@@ -30,8 +31,15 @@ const VERDICT: Record<SheetItem['verdict'], { label: string; cls: string; ring: 
 const asItems = (parts: WrittenPart[]): SheetItem[] =>
   parts
     .filter((p) => p.verdict !== 'reading')
-    .map((p, i) => ({ n: i + 1, partId: p.id, latex: p.latex, verdict: p.verdict === 'correct' ? 'right' : p.verdict === 'wrong' ? 'wrong' : p.note === 'not finished yet' ? 'unfinished' : 'unsure', note: p.note && p.note !== 'not finished yet' ? p.note : null }))
+    .map((p, i) => ({ n: i + 1, partId: p.id, subject: p.subject ?? null, latex: p.latex, verdict: p.verdict === 'correct' ? 'right' : p.verdict === 'wrong' ? 'wrong' : p.note === 'not finished yet' ? 'unfinished' : 'unsure', note: p.note && p.note !== 'not finished yet' ? p.note : null }))
 const items = computed(() => props.report?.items ?? asItems(props.parts))
+// a sheet mixing subjects: each exercise says which, and the header counts them ("Maths 6 · Science 1")
+const mix = computed(() => {
+  const n = new Map<string, number>()
+  for (const it of items.value) if (it.subject) n.set(it.subject, (n.get(it.subject) ?? 0) + 1)
+  return n.size > 1 ? SUBJECTS.filter((s) => n.has(s.id)).map((s) => ({ ...s, n: n.get(s.id) ?? 0 })) : []
+})
+const subjectOf = (id?: string | null) => (mix.value.length ? mix.value.find((s) => s.id === id) : undefined)
 const shown = computed(() => (filter.value === 'all' ? items.value : items.value.filter((x) => x.verdict === filter.value)))
 const count = (v: SheetItem['verdict']) => items.value.filter((x) => x.verdict === v).length
 const filters = computed(() =>
@@ -58,7 +66,7 @@ const cheer = computed(() => (props.report && props.report.total && props.report
         <h3 class="text-lg font-black">Your whole sheet {{ cheer }}</h3>
         <p class="text-[13px] font-semibold text-ink-2">
           <template v-if="checking">Checking every exercise on the paper…</template>
-          <template v-else-if="report">Checked at {{ when }} · {{ report.total }} {{ report.total === 1 ? 'exercise' : 'exercises' }}</template>
+          <template v-else-if="report">Checked at {{ when }} · {{ report.total }} {{ report.total === 1 ? 'exercise' : 'exercises' }}<template v-if="mix.length"> · {{ mix.map((s) => `${s.name} ${s.n}`).join(' · ') }}</template></template>
           <template v-else-if="parts.length">Your lines so far, checked one by one</template>
           <template v-else>Every exercise on the paper, checked at once</template>
         </p>
@@ -125,9 +133,14 @@ const cheer = computed(() => (props.report && props.report.total && props.report
           <div class="min-w-0 flex-1">
             <div class="flex flex-wrap items-center gap-2">
               <span class="rounded-md bg-line-2 px-1.5 py-0.5 text-[12px] font-black text-ink-2">{{ itemName(it) }}</span>
+              <span v-if="subjectOf(it.subject)" class="inline-flex items-center gap-1 rounded-full py-0.5 pl-0.5 pr-2 text-[11px] font-black text-ink" :style="{ background: subjectOf(it.subject)!.tint }">
+                <span class="flex size-4 items-center justify-center rounded-full" :style="{ background: subjectOf(it.subject)!.bg }"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path :d="subjectOf(it.subject)!.icon" /></svg></span>
+                {{ subjectOf(it.subject)!.name }}
+              </span>
               <span class="rounded-full px-2 py-0.5 text-[11px] font-black" :class="VERDICT[it.verdict].cls">{{ VERDICT[it.verdict].label }}</span>
             </div>
-            <MathTex :latex="titleTex(it.latex)" class="mt-0.5 block overflow-x-auto text-[20px]" />
+            <p v-if="wordsOnly(it.latex)" class="mt-0.5 text-[16px] font-bold leading-snug">{{ wordsOnly(it.latex) }}</p>
+            <MathTex v-else :latex="titleTex(it.latex)" class="mt-0.5 block overflow-x-auto text-[20px]" />
             <p v-if="it.note" class="mt-1 flex items-start gap-1.5 text-[13px] font-semibold leading-snug text-ink-2"><span v-if="it.verdict === 'wrong'" aria-hidden="true">💡</span>{{ youNote(it.note) }}</p>
           </div>
           <div class="flex shrink-0 flex-col items-end gap-1.5">

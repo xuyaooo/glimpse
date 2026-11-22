@@ -507,13 +507,25 @@ async function analyzePage(s, read, frameDataUrl, emit, { whole = false } = {}) 
   const lastWritten = read.lines.findLastIndex((l) => looksWritten(l))
   await detectSubject(s, read.lines[lastWritten] ?? read.lines[read.lines.length - 1], emit)
   const newest = read.lines.findLastIndex((l) => looksWork(s, l))
+  // A sheet can mix subjects (sums, then "How long does it take to drive 150 km at 60 km/h?"):
+  // each line has its own, and the tutor is told which lines are not the sheet's main subject.
+  const subjects = await lineSubjects(s, read.lines)
+  const present = [...new Set(subjects.filter(Boolean))]
+  const mixed = present.some((x) => x !== s.subject)
+  const tagged = mixed ? read.lines.map((l, i) => (subjects[i] && subjects[i] !== s.subject ? `[${subjects[i]}] ${l}` : l)) : read.lines
+  const mixNote = mixed
+    ? `\nThis sheet mixes subjects (${[s.subject, ...present.filter((x) => x !== s.subject)].map((x) => SUBJECT_NAME[x] ?? x).join(', ')}). A line marked [science] or [reading] in the transcription is judged as that subject.${present.map((x) => SUBJECT_CHECK[x] ?? '').join('')}`
+    : ''
+  const wholeNote = whole
+    ? '\nThis is a check of the WHOLE sheet: every exercise on it counts, written or printed, whatever its subject. An exercise or question with no answer yet (e.g. "How long does it take ...?") is "work" with verdict "unfinished"; only headings, names, dates and page numbers are "printed".'
+    : ''
   let out
   try {
     out = await complete('tutor', {
       messages: [
         {
           role: 'system',
-          content: `${tutorIntro(s)}
+          content: `${tutorIntro(s)}${mixNote}${wholeNote}
 You get a photo of the student's paper and its transcription by an OCR model, line by line. The transcription is what is written: do not re-read or correct it. Use the photo only to see the layout (what is handwritten, what is printed, what belongs together).
 For every transcribed line return:
 - "n": its number;
@@ -527,7 +539,7 @@ Then "feedback": what Glim says to the student about their LAST line of work, in
 - unfinished: the next step, concretely: the rule or fact to use and how it applies to this line, with its own numbers.
 Write maths in the feedback as plain text that can be read aloud (e.g. x², 3/4), not LaTeX. Don't mention line numbers (the student doesn't see the transcript's numbers): quote the maths instead.${lang !== 'en' ? '\nAlso "feedback_en": the same in English.' : ''}`,
         },
-        { role: 'user', content: `OCR transcription of the paper:\n${numbered(read.lines)}${newest >= 0 ? `\n\nThe student's newest line is the lowest one they wrote: probably line ${newest + 1}, "${read.lines[newest]}". The feedback is about that line only.` : ''}`, images: [read.image] },
+        { role: 'user', content: `OCR transcription of the paper:\n${numbered(tagged)}${newest >= 0 ? `\n\nThe student's newest line is the lowest one they wrote: probably line ${newest + 1}, "${read.lines[newest]}". The feedback is about that line only.` : ''}`, images: [read.image] },
       ],
       schema: PAGE_SCHEMA,
       maxTokens: 900,
@@ -543,9 +555,15 @@ Write maths in the feedback as plain text that can be read aloud (e.g. x², 3/4)
   const judged = Array.isArray(out.json?.lines) ? out.json.lines : []
   const work = []
   read.lines.forEach((line, i) => {
-    const j = judged.find((l) => l?.n === i + 1)
-    const kind = j?.kind || (looksWork(s, line) ? 'work' : 'printed')
-    if (kind === 'work') work.push({ line, j, n: i + 1 })
+    let j = judged.find((l) => l?.n === i + 1)
+    let kind = j?.kind || (looksWork(s, line) ? 'work' : 'printed')
+    // the whole sheet: an exercise the rules recognise, or a written question, is one, whatever
+    // the model says (seen live: the speed question on a maths sheet was taken for printed text)
+    if (whole && kind !== 'work' && looksWritten(line) && (exerciseKind(s, line) || /\?\s*\$?\s*$/.test(line))) {
+      kind = 'work'
+      j = { ...j, n: i + 1, kind, verdict: 'unfinished' }
+    }
+    if (kind === 'work') work.push({ line, j, n: i + 1, subject: subjects[i] ?? s.subject })
   })
   if (!work.length) {
     emit({ type: 'hint', hint: say(s, 'no_new_line') })
@@ -558,7 +576,7 @@ Write maths in the feedback as plain text that can be read aloud (e.g. x², 3/4)
   s.sheet = sheet.index
   const order = []
   let next = 0 // the stored lines up to here are placed
-  const read1 = work.map(({ line, j }, i) => {
+  const read1 = work.map(({ line, j, subject }, i) => {
     const mi = sheet.match[i]
     const prev = mi >= 0 ? sheet.stored[mi] : null
     const placeUpTo = mi >= 0 ? mi + 1 : (sheet.match.slice(i + 1).find((x) => x >= 0) ?? sheet.stored.length)
@@ -570,7 +588,7 @@ Write maths in the feedback as plain text that can be read aloud (e.g. x², 3/4)
       if (!s.seenExercises.includes(id)) s.seenExercises.push(id)
     }
     // the same maths as before (maybe written differently by the OCR): the line is kept as it was
-    if (prev && partKey(prev) === keys[i]) return { part: prev, j, changed: false }
+    if (prev && partKey(prev) === keys[i]) return { part: prev.subject ? prev : Object.assign(prev, { subject }), j, changed: false }
     let verdict = j?.verdict === 'correct' || j?.verdict === 'wrong' ? j.verdict : 'unsure'
     let note = verdict === 'wrong' && typeof j?.note === 'string' ? j.note : j?.verdict === 'unfinished' ? 'not finished yet' : undefined
     // exact checking overrides the model on what it can check (and the note is computed too: the
@@ -596,7 +614,7 @@ Write maths in the feedback as plain text that can be read aloud (e.g. x², 3/4)
     const id = prev ? prev.id : s.nextPartId++
     if (!prev) order.push(id)
     const exId = sum && exerciseId(sum.a, sum.b)
-    const part = { id, latex: stripMath(line), plain, raw: line, confidence: 0.9, verdict, ...(note ? { note } : {}), at: prev?.at ?? Date.now(), ...(exId && s.exercises.some((e) => e.id === exId) ? { exerciseId: exId } : {}) }
+    const part = { id, latex: stripMath(line), plain, raw: line, confidence: 0.9, verdict, subject, ...(note ? { note } : {}), at: prev?.at ?? Date.now(), ...(exId && s.exercises.some((e) => e.id === exId) ? { exerciseId: exId } : {}) }
     return { part, j, changed: true }
   })
   for (; next < sheet.stored.length; next++) order.push(sheet.stored[next].id)
@@ -678,13 +696,13 @@ Write maths in the feedback as plain text that can be read aloud (e.g. x², 3/4)
 
   // the history keeps every line read (and its photo); the newest one also keeps what Glim said.
   // A line keeps the time it was written (read again later, it stays in its place in the history).
-  const lineRecord = (p, h) => remember(s, { kind: 'line', ref: `line:${p.id}`, at: p.at, data: { partId: p.id, latex: p.latex, verdict: p.verdict, note: p.note ?? null, hint: h, photo: thumb } })
+  const lineRecord = (p, h) => remember(s, { kind: 'line', ref: `line:${p.id}`, at: p.at, data: { partId: p.id, latex: p.latex, verdict: p.verdict, note: p.note ?? null, hint: h, photo: thumb, subject: p.subject } })
   for (const part of changed) if (part !== last) lineRecord(part, null)
   if (changed.includes(last) || said) lineRecord(last, said?.text ?? null)
 
   // the line is unfinished or wrong: work the whole exercise out, step by step (a slip in an
   // equation: the exercise it came from, not the slip)
-  if (!whole && (target.note === 'not finished yet' || target.verdict === 'wrong')) await sendSteps(s, slips.get(target.id)?.exercise ?? (target.raw || target.latex), emit, { image: read.image })
+  if (!whole && (target.note === 'not finished yet' || target.verdict === 'wrong')) await sendSteps(s, slips.get(target.id)?.exercise ?? (target.raw || target.latex), emit, { image: read.image, subject: target.subject })
 }
 
 // ---------- the whole solution, step by step ----------
@@ -832,7 +850,8 @@ const ageNote = (s) => (s.age ? ` The student is ${s.age} years old: explain at 
 
 // Solves the exercise and sends {type: 'steps'}: first the animation (as soon as the decision
 // model has picked it), then the tutor's worked solution. Once per exercise.
-async function sendSteps(s, exercise, emit, { reason = 'line', image } = {}) {
+async function sendSteps(s, exercise, emit, { reason = 'line', image, subject: own } = {}) {
+  const subject = SUBJECTS.includes(own) ? own : s.subject // the exercise's own subject on a mixed sheet
   exercise = String(exercise ?? '').trim().replace(LABEL, '') // "b) 47 + 38 = 75": the label is not part of it
   const key = mathKey(exercise)
   if (!key || s.stepsFor === key) return
@@ -881,7 +900,7 @@ async function sendSteps(s, exercise, emit, { reason = 'line', image } = {}) {
     messages: [
       {
         role: 'system',
-        content: `${SOLVE_INTRO[s.subject] ?? SOLVE_INTRO.maths}${ageNote(s)}
+        content: `${SOLVE_INTRO[subject] ?? SOLVE_INTRO.maths}${ageNote(s)}
 For each step:
 - "say": what we do and why, in ${LANG_NAME[lang]}, one or two short, simple sentences, plain text (maths written like 1/(1+x) or x², not LaTeX);
 - "math": the line written at this step, in LaTeX (without $).
@@ -912,7 +931,7 @@ Compute carefully and check the result before answering.`,
     }
   }
   // a word to spell: its animation needs the right spelling, which the tutor has just given
-  if (!sc && s.subject === 'reading' && typeof out?.json?.result === 'string') {
+  if (!sc && subject === 'reading' && typeof out?.json?.result === 'string') {
     sc = await decideScene(s, exercise, { answer: unwrap(out.json.result) }).catch(() => null)
   }
   // the integral animation can show F(b) - F(a) once the tutor gives an antiderivative (checked there)
@@ -967,7 +986,7 @@ Compute carefully and check the result before answering.`,
   const hints = safeHints(out?.json?.hints, result || sc?.resultTex || '')
   Object.assign(steps, { title: title || 'Step by step', items, result, hints, writing: false })
   emit({ type: 'steps', steps: { ...steps } })
-  remember(s, { kind: 'steps', ref: `steps:${key}`, data: { about: steps.about, title: steps.title, result: steps.result, scene: sc ?? null, items, hints } })
+  remember(s, { kind: 'steps', ref: `steps:${key}`, data: { about: steps.about, title: steps.title, result: steps.result, scene: sc ?? null, items, hints, subject } })
 }
 
 // ---------- the end of a session: what happened, in a few friendly lines ----------
@@ -1003,6 +1022,31 @@ const TOPIC = {
 // The session follows it (the tutor's words, what counts as work, the records' subject) and the
 // app is told.
 const SUBJECTS = ['maths', 'reading', 'science']
+// The kind of exercise the rules recognise in a line ("drive 150 km at 60 km/h" -> speed), or null.
+function exerciseKind(s, line) {
+  try {
+    return sceneFor({ exercise: line, age: s.age })?.kind ?? null
+  } catch {
+    return null
+  }
+}
+// Each line's own subject, or null when it isn't clear (a heading, a stray mark): the rules first
+// (an exercise they compute says what it is), else Laya when it is sure (asked for all lines at once).
+async function lineSubjects(s, lines) {
+  return Promise.all(
+    lines.slice(0, 30).map(async (line) => {
+      if (!looksWritten(line)) return null
+      const kind = exerciseKind(s, line)
+      if (kind) return SUBJECT_OF[kind] ?? 'maths'
+      if (looksMathy(line)) return 'maths'
+      // only what reads like an exercise (a question, a number, a sentence): not "Exercise Sheet"
+      if (!/\?|\d/.test(line) && line.trim().split(/\s+/).length < 4) return null
+      const laya = await askLaya('/decide', { text: line }, 800)
+      return laya?.subject && laya.subject_probability >= 0.6 && SUBJECTS.includes(laya.subject) ? laya.subject : null
+    }),
+  )
+}
+
 async function detectSubject(s, text, emit) {
   if (!text) return s.subject
   // an exercise the rules can compute says what it is (the dice question is probability: maths)
@@ -1315,13 +1359,12 @@ function aboutTex(exercise) {
 // History: records saved to the database after each event (server/app.js -> store.js).
 // `ref` makes a record replaceable: a line read again updates its record.
 // Every record carries its subject, so Maths, Reading and Science are kept apart in My work.
+// data.subject: the record's own subject (an exercise on a mixed sheet), else the session's
 function remember(s, { kind, ref, data, at }) {
-  ;(s.history ||= []).push({ kind, ref: `${s.id}:${ref}`, at: Number.isFinite(at) ? at : Date.now(), data: { ...data, subject: s.subject || 'maths' } })
+  const subject = SUBJECTS.includes(data?.subject) ? data.subject : s.subject || 'maths'
+  ;(s.history ||= []).push({ kind, ref: `${s.id}:${ref}`, at: Number.isFinite(at) ? at : Date.now(), data: { ...data, subject } })
 }
 
-// The line of the transcription (or two or three consecutive lines together) closest to `text`,
-// by shared letter pairs (Dice coefficient on the text without spaces, $ and numbering); null if
-// none is close enough.
 // The tutor's steps, as shown: at most 8, plain text to read and LaTeX to write.
 function stepItems(list) {
   return (Array.isArray(list) ? list : [])
@@ -1354,7 +1397,7 @@ export function safeHints(hints, result) {
     .filter((h) => {
       if (!h) return false
       const f = flat(h)
-      if (/\b(?:answer|result|solution)\s+(?:is|will be|should be)\b/i.test(h)) return false // "the answer is ..." 
+      if (/\b(?:answer|result|solution)\s+(?:is|will be|should be)\b/i.test(h)) return false // "the answer is ..."
       if (whole.length > 1 && f.includes(whole)) return false
       if (value.length > 1 && f.includes(value)) return false
       return !(says && (says.test(f) || says.test(texToPlain(h).toLowerCase())))
@@ -1362,6 +1405,9 @@ export function safeHints(hints, result) {
     .slice(0, 3)
 }
 
+// The line of the transcription (or two or three consecutive lines together) closest to `text`,
+// by shared letter pairs (Dice coefficient on the text without spaces, $ and numbering); null if
+// none is close enough.
 export function closestLine(text, lines) {
   // compared without spaces, $, numbering, dots (the model may drop a "..."), with one times sign
   const norm = (t) =>
@@ -1633,7 +1679,7 @@ export async function handle(state, e, emit) {
       const part = s.parts.find((p) => p.id === e.partId)
       if (part) {
         s.stepsFor = null // asked for again on purpose
-        await sendSteps(s, part.raw || part.latex, emit, { reason: 'question' })
+        await sendSteps(s, part.raw || part.latex, emit, { reason: 'question', subject: part.subject })
         emit({ type: 'status', state: 'watching' })
       }
       return s

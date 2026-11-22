@@ -16,6 +16,8 @@ export interface WrittenPart {
   note?: string
   /** The recommended exercise this part answers, if any. */
   exerciseId?: string
+  /** Its own subject (a sheet can mix maths, reading and science). */
+  subject?: string
   /** x, y, w, h in normalised camera coordinates (live camera only). */
   box?: [number, number, number, number]
   /** The photo this line was read from (JPEG data URL, the whole frame, never cropped). */
@@ -102,6 +104,8 @@ export interface SheetItem {
   n: number
   /** Its label on the sheet ("a", "3"), when it has one. */
   label?: string | null
+  /** Its own subject: maths, reading or science (a sheet can mix them). */
+  subject?: string | null
   partId: number
   latex: string
   verdict: 'right' | 'wrong' | 'unfinished' | 'unsure'

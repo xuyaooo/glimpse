@@ -39,7 +39,7 @@ const BADGE = { correct: 'bg-right-mark', wrong: 'bg-wrong-mark', reading: 'bg-l
     <div role="tablist" aria-label="Show" class="sticky top-0 z-10 grid grid-cols-2 gap-1 rounded-2xl bg-white/90 p-1 shadow-sm ring-1 ring-line backdrop-blur">
       <button type="button" role="tab" :aria-selected="tab === 'line'" class="flex min-h-10 items-center justify-center gap-2 rounded-xl text-[14px] font-black transition" :class="tab === 'line' ? 'bg-lagoon text-white shadow' : 'text-ink-2 hover:bg-line-2'" @click="$emit('update:tab', 'line')">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16.9 3.3a2 2 0 0 1 2.8 0l1 1a2 2 0 0 1 0 2.8L9.4 18.4 4 20l1.6-5.4z" /></svg>
-        This line
+        This exercise
         <span v-if="selected" class="rounded-full px-1.5 text-[12px] tabular-nums" :class="tab === 'line' ? 'bg-white/20' : 'bg-line-2'">#{{ selected.id }}</span>
       </button>
       <button type="button" role="tab" :aria-selected="tab === 'sheet'" class="flex min-h-10 items-center justify-center gap-2 rounded-xl text-[14px] font-black transition" :class="tab === 'sheet' ? 'bg-lagoon text-white shadow' : 'text-ink-2 hover:bg-line-2'" @click="$emit('update:tab', 'sheet')">
@@ -60,7 +60,7 @@ const BADGE = { correct: 'bg-right-mark', wrong: 'bg-wrong-mark', reading: 'bg-l
     <!-- 1. The line: camera → digital -->
     <section aria-label="What I read" class="relative rounded-[24px] bg-white p-5 shadow-[0_14px_30px_-22px_rgb(24_41_74/0.5)]">
       <div class="flex items-center justify-between gap-2">
-        <h3 class="text-lg font-black">{{ selected ? `Line ${selected.id}` : 'What I read' }}</h3>
+        <h3 class="text-lg font-black">{{ selected ? `Exercise ${selected.id}` : 'What I read' }}</h3>
         <template v-if="selected">
           <span v-if="selected.verdict === 'correct'" class="relative inline-flex animate-pop items-center gap-1 rounded-full bg-right-bg px-3 py-1 text-[14px] font-black text-right">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12.5l5 5L20 6.5" /></svg>Right
@@ -87,7 +87,7 @@ const BADGE = { correct: 'bg-right-mark', wrong: 'bg-wrong-mark', reading: 'bg-l
 
       <div v-if="!selected" class="mt-3 flex flex-col items-center gap-2 rounded-2xl border-2 border-dashed border-line px-4 py-8 text-center">
         <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#14A096" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="animation: bob 1.6s ease-in-out infinite alternate"><path d="M16.9 3.3a2 2 0 0 1 2.8 0l1 1a2 2 0 0 1 0 2.8L9.4 18.4 4 20l1.6-5.4z" /></svg>
-        <p class="text-[15px] font-bold text-ink-2">Write a line on your paper, then check it (Glim asks when you stop writing). The camera’s picture and what I read appear here.</p>
+        <p class="text-[15px] font-bold text-ink-2">Write your exercises, then check your whole sheet (Glim asks when you stop writing). Pick an exercise to see what the camera saw and how to solve it.</p>
       </div>
 
       <div v-else class="mt-3 flex flex-col gap-3">

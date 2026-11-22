@@ -6,12 +6,12 @@ import { computed, onBeforeUnmount, onMounted } from 'vue'
 import FocusTrap from '../FocusTrap.vue'
 import MathTex from '../MathTex.vue'
 import Mascot from '../Mascot.vue'
-import { titleTex } from '@/lib/latex'
+import { titleTex, wordsOnly } from '@/lib/latex'
 import { itemName, youNote } from '@/lib/sheet'
 import type { SheetItem, SheetReport } from '@/lib/types'
 
 const props = defineProps<{ prompt: boolean; checking: boolean; report: SheetReport | null; open: boolean }>()
-const emit = defineEmits<{ line: []; check: []; later: []; close: []; explain: [partId: number] }>()
+const emit = defineEmits<{ check: []; later: []; close: []; explain: [partId: number] }>()
 
 const BADGE: Record<SheetItem['verdict'], { label: string; cls: string; icon: string }> = {
   right: { label: 'Right', cls: 'bg-right-bg text-[#136e43]', icon: '✓' },
@@ -38,11 +38,10 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey, true))
       <Mascot :size="44" class="shrink-0" />
       <div class="min-w-[150px] flex-1">
         <p class="text-[15px] font-black leading-tight">Done writing?</p>
-        <p class="text-[13px] font-semibold text-ink-2">Check the line you just wrote, or every exercise on the sheet.</p>
+        <p class="text-[13px] font-semibold text-ink-2">Glim can check every exercise on your sheet.</p>
       </div>
       <div class="flex flex-wrap gap-2">
-        <button type="button" class="btn-lagoon min-h-10 rounded-xl px-3.5 text-[14px] font-black" @click="emit('line')">Check my line</button>
-        <button type="button" class="min-h-10 rounded-xl border-2 border-lagoon-soft bg-white px-3 text-[14px] font-black text-lagoon-deep hover:bg-lagoon-mist" @click="emit('check')">Check the whole sheet</button>
+        <button type="button" class="btn-lagoon min-h-10 rounded-xl px-3.5 text-[14px] font-black" @click="emit('check')">Check my whole sheet</button>
         <button type="button" class="min-h-10 rounded-xl px-2.5 text-[13px] font-bold text-ink-2 hover:bg-line-2" @click="emit('later')">Not yet</button>
       </div>
     </div>
@@ -85,7 +84,8 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey, true))
                 <li v-for="(it, i) in report.items" :key="it.partId" class="flex items-start gap-3 rounded-2xl border-2 p-3" :class="it.verdict === 'right' ? 'border-[#cdeedb]' : it.verdict === 'wrong' ? 'border-[#f6cdd1]' : 'border-line'" :style="{ animation: `rise 400ms ${0.1 + i * 0.05}s both` }">
                   <span class="flex h-8 min-w-8 shrink-0 items-center justify-center rounded-full bg-line-2 px-1.5 text-[13px] font-black text-ink-2">{{ itemName(it) }}</span>
                   <div class="min-w-0 flex-1">
-                    <MathTex :latex="titleTex(it.latex)" class="block overflow-x-auto text-[20px]" />
+                    <p v-if="wordsOnly(it.latex)" class="text-[16px] font-bold leading-snug">{{ wordsOnly(it.latex) }}</p>
+                    <MathTex v-else :latex="titleTex(it.latex)" class="block overflow-x-auto text-[20px]" />
                     <p v-if="it.note" class="mt-1 text-[13px] font-semibold text-ink-2">{{ youNote(it.note) }}</p>
                   </div>
                   <div class="flex shrink-0 flex-col items-end gap-1.5">

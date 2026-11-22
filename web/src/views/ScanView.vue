@@ -25,6 +25,7 @@ import { useManualTriggers } from '@/lib/keys'
 import { usePencilLift } from '@/lib/pencilLift'
 import { preloadVoice, speakAuto, stopSpeaking } from '@/lib/speech'
 import { settings } from '@/lib/settings'
+import { subjectOfKind } from '@/lib/sceneKinds'
 import { subjectById } from '@/lib/subjects'
 import { ui } from '@/lib/ui'
 import { useStepPlayer } from '@/lib/useStepPlayer'
@@ -53,7 +54,8 @@ const shownStatus = computed<EngineState>(() => (recording.value ? 'listening' :
 const ended = ref(false)
 let alive = true
 
-const subject = computed(() => subjectById(state.subject))
+// the header: the subject of what is being explained (a speed question on a maths sheet is science)
+const subject = computed(() => subjectById(state.topic?.kind && state.connection !== 'demo' ? subjectOfKind(state.topic.kind) : state.subject))
 const live = computed(() => !paper.value && cam.status.value === 'live')
 const selected = computed(() => state.parts.find((p) => p.id === ui.selectedPartId) ?? state.parts[state.parts.length - 1] ?? null)
 const teaching = computed(() => (selected.value ? (state.teachings.filter((t) => t.partId === selected.value!.id).pop() ?? null) : null))
@@ -222,10 +224,6 @@ function closePrompt() {
   scanPrompt.value = false
   window.clearTimeout(promptTimer)
 }
-function checkLine() {
-  closePrompt()
-  capture()
-}
 function checkWholeSheet() {
   closePrompt()
   if (!state.student || state.asking || ui.summaryOpen || state.status === 'reading' || state.status === 'thinking') return
@@ -273,7 +271,7 @@ const nudgeSheet = computed(
 )
 // development only: open the prompt without moving a pencil (browser tests)
 if (import.meta.env.DEV) (window as unknown as { __glimpseScan?: object }).__glimpseScan = { offerScan, checkWholeSheet }
-useManualTriggers({ cut: capture, askStart: onAskStart, askEnd: onAskEnd })
+useManualTriggers({ cut: () => checkWholeSheet(), askStart: onAskStart, askEnd: onAskEnd })
 
 // ------------------------------------------------------------------ reacting to the engine
 
@@ -401,7 +399,7 @@ onMounted(async () => {
   if (state.summary || ui.summaryOpen) ended.value = true // finished on the desk
   if (!paper.value) {
     await cam.start()
-    if (cam.status.value === 'live') log('camera', `Camera on: ${cam.label.value}.`, 'The video stays in this browser. Only a line you finish is read.')
+    if (cam.status.value === 'live') log('camera', `Camera on: ${cam.label.value}.`, 'The video stays in this browser. The sheet is read only when you check it.')
   }
   // `?autoplay`: hands-free demo, a line every few seconds.
   if ('autoplay' in route.query && alive) {
@@ -458,7 +456,7 @@ const STATUS: Record<string, string> = {
               {{ subject.name }}, {{ topicLabel(subject.topic).toLowerCase() }}
             </span>
           </h1>
-          <p class="text-[14px] font-semibold text-ink-2">{{ state.student?.name }}, write on your paper, then check your line or the whole sheet.</p>
+          <p class="text-[14px] font-semibold text-ink-2">{{ state.student?.name }}, write on your paper, then check your whole sheet.</p>
         </div>
       </div>
 
@@ -476,7 +474,7 @@ const STATUS: Record<string, string> = {
           :aria-checked="autoRead"
           :disabled="!live || state.connection !== 'live'"
           class="flex min-h-10 items-center gap-2.5 rounded-full bg-white px-3.5 text-[14px] font-bold shadow-sm disabled:opacity-50"
-          title="Reads a line by itself when you stop writing"
+          title="When you stop writing, Glim offers to check the whole sheet"
           @click="autoRead = !autoRead"
         >
           <span class="relative block h-6 w-11 shrink-0 rounded-full transition-colors duration-300" :class="autoRead ? 'bg-lagoon' : 'bg-line'" aria-hidden="true">
@@ -562,10 +560,9 @@ const STATUS: Record<string, string> = {
         {{ state.connection === 'offline' ? 'The tutor stopped. Restart the engine.' : STATUS[shownStatus] }}
       </span>
       <span v-if="state.connection === 'demo'" class="rounded-full bg-line-2 px-2.5 py-0.5 text-[12px] font-black text-ink-2">Demo tutor</span>
-      <span class="hidden text-[13px] font-semibold text-ink-3 xl:inline">{{ realEngine ? 'Point at your paper, hold still, then say your question. W reads a line, hold A to talk, Esc goes home' : 'Keyboard: W reads a line, hold A to ask, Esc goes home' }}</span>
+      <span class="hidden text-[13px] font-semibold text-ink-3 xl:inline">{{ realEngine ? 'Point at your paper, hold still, then say your question. W checks the whole sheet, hold A to talk, Esc goes home' : 'Keyboard: W checks the whole sheet, hold A to ask, Esc goes home' }}</span>
       <div class="ml-auto flex flex-wrap gap-2">
         <button v-if="state.parts.length || state.questions.length" type="button" class="min-h-11 rounded-xl border-2 border-line bg-white px-4 text-[14px] font-black transition-transform hover:-translate-y-0.5" title="End the session and see how it went" @click="finish">Finish</button>
-        <button type="button" class="btn-lagoon min-h-11 rounded-xl px-4 text-[14px] font-black transition-transform hover:-translate-y-0.5 active:scale-95" @click="capture">Read my line now</button>
         <div class="relative">
           <!-- nobody is writing: a nudge towards the whole-sheet check -->
           <Transition name="fade">
@@ -576,7 +573,7 @@ const STATUS: Record<string, string> = {
           <button
             type="button"
             class="min-h-11 rounded-xl border-2 px-4 text-[14px] font-black transition-all duration-300 hover:-translate-y-0.5 active:scale-95"
-            :class="nudgeSheet ? 'sheet-nudge border-tangerine bg-tangerine text-white' : 'border-lagoon-soft bg-white text-lagoon-deep hover:bg-lagoon-mist'"
+            :class="nudgeSheet ? 'sheet-nudge border-tangerine bg-tangerine text-white' : 'btn-lagoon border-transparent'"
             title="Glim checks every exercise on the sheet"
             @click="checkWholeSheet"
           >
@@ -614,7 +611,7 @@ const STATUS: Record<string, string> = {
     </footer>
 
     <!-- "Done writing?" and the whole-sheet report -->
-    <SheetCheck :prompt="scanPrompt" :checking="state.sheetChecking" :report="state.sheet" :open="sheetOpen" @line="checkLine" @check="checkWholeSheet" @later="closePrompt" @close="sheetOpen = false" @explain="explain" />
+    <SheetCheck :prompt="scanPrompt" :checking="state.sheetChecking" :report="state.sheet" :open="sheetOpen" @check="checkWholeSheet" @later="closePrompt" @close="sheetOpen = false" @explain="explain" />
   </div>
 </template>
 

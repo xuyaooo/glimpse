@@ -28,7 +28,7 @@ export function sheetLabel(raw) {
 export function sheetReport(parts, { name } = {}) {
   const items = parts
     .filter((p) => p && p.verdict !== 'reading' && p.latex)
-    .map((p, i) => ({ n: i + 1, label: sheetLabel(p.raw), partId: p.id, latex: unlabelled(p.latex), verdict: sheetVerdict(p), note: p.note && p.note !== 'not finished yet' ? SHORT(p.note, 120) : null }))
+    .map((p, i) => ({ n: i + 1, label: sheetLabel(p.raw), subject: p.subject ?? null, partId: p.id, latex: unlabelled(p.latex), verdict: sheetVerdict(p), note: p.note && p.note !== 'not finished yet' ? SHORT(p.note, 120) : null }))
   const count = (v) => items.filter((x) => x.verdict === v).length
   const [right, wrong, unfinished, unsure] = ['right', 'wrong', 'unfinished', 'unsure'].map(count)
   const total = items.length

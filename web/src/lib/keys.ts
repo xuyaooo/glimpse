@@ -5,7 +5,7 @@ import { state } from './engine'
   The engine detects both things on its own: a finished part (pencil lifted, ink settled)
   and a question (finger pointing + speech). These keys are the manual fallback, and what
   drives the demo. An MX Master button can be mapped to them in Logi Options+.
-    W, C or Space  "this part is finished, read it now"
+    W, C or Space  "check my whole sheet"
     A (hold)       "I'm pointing and asking"
   If a button only sends a quick tap rather than holding the key, a short press starts
   listening and the next press stops it.

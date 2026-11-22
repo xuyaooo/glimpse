@@ -290,6 +290,26 @@ export function joinColumnSums(lines) {
   }
   return out
 }
+// ---------- a sentence written over two lines ----------
+// "How long does it take to drive" / "150 km at 60 km/h?" is one question: GLM-OCR gives each
+// written line on its own, and half a question can't be checked or solved. Joined only when the
+// first part is an unfinished sentence (3+ words, no maths, no full stop) and the second carries
+// on (a small letter or a number first, no "=") and ends the sentence, or the first ends on a
+// word like "to" or "at". A heading ("Exercise Sheet") never joins the sum under it.
+const CARRIES_ON = /\b(?:to|at|of|the|a|an|in|on|for|and|or|with|from|by|is|are|was|has|have|does|do|if|than|into|per)$/i
+export function joinWrappedLines(lines) {
+  const out = []
+  for (const line of lines) {
+    const a = out[out.length - 1]
+    const b = String(line).trim()
+    const textA = a && !/[$=\\]/.test(a) && !/[.?!:;]\s*$/.test(a) && a.trim().split(/\s+/).length >= 3 && /[a-z]{2}/i.test(a)
+    const goesOn = textA && !b.includes('=') && /^\$?\s*[a-z0-9]/.test(b) && (/[?.!]\s*\$?$/.test(b) || CARRIES_ON.test(a.trim()))
+    if (goesOn) out[out.length - 1] = `${a.trim()} ${b}`
+    else out.push(line)
+  }
+  return out
+}
+
 /** A column sum the OCR squashed into a division ("a) 34 ÷ 59": the second number and the bar lost). */
 export function squashedColumn(line) {
   const t = String(line).trim().replace(LABEL, '')
@@ -380,7 +400,7 @@ export { toJpegBase64 }
 export async function readFrame(frame) {
   const b64 = Buffer.from(frame).toString('base64')
   const ocr = await ocrImage(b64, 800)
-  let lines = joinColumnSums(cleanOcrLines(ocr.text))
+  let lines = joinWrappedLines(joinColumnSums(cleanOcrLines(ocr.text)))
   let ms = ocr.ms
   let reread = null
   // A column sum squashed into "34 ÷ 59": the whole frame is read once more, smaller (still the
@@ -390,7 +410,7 @@ export async function readFrame(frame) {
     try {
       const img = decodeJpeg(frame)
       const again = await ocrImage(toJpegBase64(resizeRgba(img, Math.round(Math.max(img.width, img.height) * 0.6)), 90), 800)
-      const lines2 = joinColumnSums(cleanOcrLines(again.text))
+      const lines2 = joinWrappedLines(joinColumnSums(cleanOcrLines(again.text)))
       ms += again.ms
       reread = again.text
       if (lines2.filter(squashedColumn).length < squashed && lines2.length >= lines.length) lines = lines2

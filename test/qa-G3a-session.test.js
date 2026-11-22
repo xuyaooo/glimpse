@@ -462,3 +462,35 @@ test('summary: in the session language, without English topics added', async () 
   const tr = (await send(session('tr0', { lang: 'tr' }), { type: 'session_end' })).last('summary').summary
   assert.equal(tr.lang, 'en')
 })
+
+// ---------------------------------------------------------------- a sheet mixing subjects
+
+test('a sheet mixing subjects: every exercise counts, each with its subject, solved and filed as it', async () => {
+  resetStub()
+  const s = session('mixed', { subject: 'maths' })
+  const lines = ['Exercise Sheet', '$376 + 447 =$', 'How long does it take to drive 150 km at 60 km/h?', '$24 ÷ 6 =$']
+  st.ocr = () => lines.join('\n')
+  // seen live: the model took the speed question for printed text
+  st.page = (opts) => {
+    st.prompt = opts.messages.map((m) => m.content).join('\n')
+    return { lines: lines.map((l, i) => ({ n: i + 1, kind: i === 1 || i === 3 ? 'work' : 'printed', verdict: 'unfinished' })), feedback: 'fb' }
+  }
+  const r = await send(s, { type: 'check_sheet', image: frame })
+  const sheet = r.last('sheet').sheet
+  assert.deepEqual(sheet.items.map((x) => [x.subject, x.verdict]), [['maths', 'unfinished'], ['science', 'unfinished'], ['maths', 'unfinished']])
+  assert.match(st.prompt, /\[science\] How long does it take/) // the tutor is told which line is science
+  assert.match(st.prompt, /WHOLE sheet/)
+  assert.doesNotMatch(st.prompt, /\[reading\] Exercise Sheet/) // a heading is no subject
+  assert.equal(s.subject, 'maths') // the session stays maths
+  assert.equal(r.hist.find((h) => h.kind === 'line' && /drive/.test(h.data.latex)).data.subject, 'science')
+  // "Help me" on the speed question: solved as science, with its animation, filed under science
+  st.steps = (opts) => {
+    st.solve = opts.messages[0].content
+    return { hints: ['Speed is distance divided by time.'], steps: [{ say: 'divide', math: '150 \\div 60' }], result: '2.5\\text{ h}', exercise: '' }
+  }
+  const speed = sheet.items[1]
+  const ex = await send(s, { type: 'explain', partId: speed.partId })
+  assert.match(st.solve, /science tutor/)
+  assert.equal(ex.last('steps').steps.scene?.kind, 'speed')
+  assert.equal(ex.hist.find((h) => h.kind === 'steps').data.subject, 'science')
+})

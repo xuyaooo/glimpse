@@ -76,3 +76,12 @@ test('a maths "$" left open by the OCR is closed (a price is not)', async () => 
   assert.deepEqual(cleanOcrLines('A pen costs $3 each, how much are four pens'), ['A pen costs $3 each, how much are four pens'])
   assert.deepEqual(cleanOcrLines('$$x^2$$'), ['$$x^2$$'])
 })
+
+test('a question written over two lines is one exercise; a heading never joins the sum under it', async () => {
+  const { joinWrappedLines } = await import('../server/engine/reader.js')
+  assert.deepEqual(joinWrappedLines(['Exercise Sheet', '$376 + 447 = 813$', 'How long does it take to drive', '150 km at 60 km/h?', '$24 : 6 = 4$']), ['Exercise Sheet', '$376 + 447 = 813$', 'How long does it take to drive 150 km at 60 km/h?', '$24 : 6 = 4$'])
+  assert.deepEqual(joinWrappedLines(['A train leaves at 9 and travels to', 'the next town, 120 km away']), ['A train leaves at 9 and travels to the next town, 120 km away'])
+  assert.deepEqual(joinWrappedLines(['Solve these equations', '$2x + 3 = 7$']), ['Solve these equations', '$2x + 3 = 7$'])
+  assert.deepEqual(joinWrappedLines(['Name: Sam Lee today', '3 apples and 4 pears']), ['Name: Sam Lee today', '3 apples and 4 pears'])
+  assert.deepEqual(joinWrappedLines(['What is the capital of France?', 'paris is the answer.']), ['What is the capital of France?', 'paris is the answer.'])
+})

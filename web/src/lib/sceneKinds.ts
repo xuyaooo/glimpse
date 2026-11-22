@@ -149,3 +149,10 @@ export const CATALOG: { level: string; kinds: { kind: string; what: string; exam
     ],
   },
 ]
+
+// A kind's subject (server/engine/domains.js): the reading and science animations, the rest maths.
+const READING_KINDS = ['syllables', 'phonics', 'spelling', 'plural', 'sentence']
+const SCIENCE_KINDS = ['units', 'speed', 'density', 'circuit', 'states', 'food_chain']
+export function subjectOfKind(kind: string | undefined | null): 'maths' | 'reading' | 'science' {
+  return READING_KINDS.includes(kind ?? '') ? 'reading' : SCIENCE_KINDS.includes(kind ?? '') ? 'science' : 'maths'
+}
