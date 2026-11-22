@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { titleTex } from '@/lib/latex'
+import ExerciseText from '../ExerciseText.vue'
 import { sceneIcon, sceneLabel } from '@/lib/sceneKinds'
 // An animation shown like a short video: a poster with a play button, a title card, the scene
 // drifting gently like a camera, subtitles told by Glim, a progress bar with one segment per
@@ -83,7 +83,7 @@ const drift = computed(() => {
       <!-- title card -->
       <div v-if="titled" :key="`title-${player.run}`" class="title-card pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-2 bg-[#0b1d28]/80 backdrop-blur-sm" :style="{ animationDelay: `-${titleAge}ms` }">
         <span class="font-black uppercase tracking-[0.2em] text-[#3fe0d0]" :class="big ? 'text-[15px]' : 'text-[11px]'">{{ sceneIcon(scene.kind) }} {{ sceneLabel(scene.kind) }}</span>
-        <MathTex v-if="steps.about" :latex="titleTex(steps.about)" class="max-w-[90%] overflow-hidden" :class="big ? 'text-[40px]' : 'text-[22px]'" />
+        <ExerciseText v-if="steps.about" :latex="steps.about" class="max-w-[90%] text-center" :math="big ? 'text-[40px] !overflow-hidden' : 'text-[22px] !overflow-hidden'" :words="big ? 'text-[30px] font-black' : 'text-[17px] font-black'" />
       </div>
 
       <!-- end card -->

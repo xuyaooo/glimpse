@@ -1,6 +1,7 @@
 <script setup lang="ts">
 // My work: every line written today, the reasoning given for the selected one on the
 // whiteboard, and Summary / Explanation beside it.
+import ExerciseText from '@/components/ExerciseText.vue'
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import AppShell from '@/components/AppShell.vue'
@@ -18,7 +19,7 @@ import { useDesk } from '@/lib/useDesk'
 import MathTex from '@/components/MathTex.vue'
 import { start } from '@/lib/player'
 import { useCountUp } from '@/lib/useCountUp'
-import { searchKey, titleTex } from '@/lib/latex'
+import { searchKey } from '@/lib/latex'
 import { useWork, youNote, type SavedLine } from '@/lib/useWork'
 
 const desk = useDesk()
@@ -172,7 +173,7 @@ const learned = computed(() => {
                   Watch the animation
                 </button>
                 <p v-if="savedSelected.solution?.result" class="flex items-center gap-2 text-[14px] font-bold">Answer <MathTex :latex="savedSelected.solution.result" class="text-[18px]" /></p>
-                <p v-else-if="savedSelected.solution?.about" class="text-[13px] text-ink-2"><MathTex :latex="titleTex(savedSelected.solution.about)" /></p>
+                <ExerciseText v-else-if="savedSelected.solution?.about" :latex="savedSelected.solution.about" class="text-ink-2" math="text-[13px]" words="text-[13px] font-semibold" />
               </div>
             </div>
           </div>

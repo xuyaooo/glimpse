@@ -47,9 +47,10 @@ export function startActivityLog() {
         if (verdicts.get(p.id) === p.verdict) continue
         verdicts.set(p.id, p.verdict)
         if (p.verdict === 'reading') log('read', `Pencil lifted. Reading line ${p.id}.`, 'Only this line is cropped from the picture and read, on this laptop.')
-        else if (p.verdict === 'correct') log('right', `Line ${p.id} is right.`, `Read ${Math.round(p.confidence * 100)}% sure, then checked with exact arithmetic.`)
-        else if (p.verdict === 'wrong') log('wrong', `Line ${p.id} isn't right yet.`, p.note ? youNote(p.note) : 'Checked with exact arithmetic.')
-        else log('unsure', `Line ${p.id} needs fixing first.`, p.note)
+        else if (p.verdict === 'correct') log('right', `Exercise ${p.id} is right.`, `Read ${Math.round(p.confidence * 100)}% sure, then checked with exact arithmetic.`)
+        else if (p.verdict === 'wrong') log('wrong', `Exercise ${p.id} isn't right yet.`, p.note ? youNote(p.note) : 'Checked with exact arithmetic.')
+        else if (p.note === 'not finished yet') log('unsure', `Exercise ${p.id} isn't finished yet.`, 'Write the answer, then check the sheet again.')
+        else log('unsure', `Glim couldn't check exercise ${p.id}.`, p.note)
       }
     },
   )

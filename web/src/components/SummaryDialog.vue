@@ -1,13 +1,12 @@
 <script setup lang="ts">
 // The end of a session: what went well, what was practised, mistakes with a tip, what's next,
 // and a note for grown-ups. Written by the tutor from what happened (the stars are counted).
+import ExerciseText from './ExerciseText.vue'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import Confetti from './Confetti.vue'
 import FocusTrap from './FocusTrap.vue'
 import Mascot from './Mascot.vue'
-import MathTex from './MathTex.vue'
-import { titleTex } from '@/lib/latex'
 import { localSummary, startSession, state } from '@/lib/engine'
 import { nextTip } from '@/lib/records'
 import { speakAuto, stopSpeaking } from '@/lib/speech'
@@ -133,7 +132,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey, true))
             <ul class="m-0 flex list-none flex-wrap gap-2 p-0">
               <li v-for="(r, i) in s.review.slice(0, 3)" :key="r.id" class="flex min-w-0 items-center gap-2 rounded-xl bg-[#fffdf7] px-3 py-2 ring-1 ring-line" :style="{ animation: `pop 400ms ${0.3 + i * 0.1}s both` }">
                 <span class="shrink-0 text-[11px] font-black uppercase tracking-wide text-[#b4531a]">{{ LEVEL[r.level] }}</span>
-                <MathTex :latex="titleTex(r.exercise)" class="min-w-0 overflow-x-auto text-[18px]" />
+                <ExerciseText :latex="r.exercise" math="text-[18px]" words="text-[15px] font-bold" />
               </li>
             </ul>
             <button type="button" class="inline-flex min-h-11 w-fit items-center gap-2 rounded-xl bg-tangerine px-4 text-[15px] font-black text-white shadow transition hover:scale-[1.02]" @click="practise">Practise in My work</button>

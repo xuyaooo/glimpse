@@ -3,6 +3,7 @@
 // what was read from it, whether it's right, the explanation (in step with the drawing on the
 // camera), the worked solution, similar exercises, answers to questions, and what's going on.
 // "Whole sheet": every exercise on the paper (SheetPanel), filled by "Check my whole sheet".
+import ExerciseText from '../ExerciseText.vue'
 import ActivityFeed from './ActivityFeed.vue'
 import StepByStep from './StepByStep.vue'
 import SheetPanel from './SheetPanel.vue'
@@ -94,7 +95,7 @@ const BADGE = { correct: 'bg-right-mark', wrong: 'bg-wrong-mark', reading: 'bg-l
         <div class="flex flex-col gap-1.5">
           <figure v-if="crop" :key="crop.length" class="m-0 flex flex-col gap-1.5" style="animation: rise 500ms both">
             <figcaption class="text-[12px] font-black text-ink-2">What the camera saw</figcaption>
-            <img :src="crop" alt="The handwritten line, as the camera saw it" class="max-h-44 w-full rounded-xl border border-line object-contain object-left shadow-sm" />
+            <img :src="crop" alt="The paper, as the camera saw it" class="aspect-video w-full rounded-xl border border-line bg-[#0b1d28] object-contain shadow-sm" />
           </figure>
           <svg v-if="crop" class="ml-6" width="20" height="26" viewBox="0 0 20 26" aria-hidden="true"><path class="draw" pathLength="1" style="--dur: 0.4s; --delay: 0.3s" d="M10 2v20M3 15l7 7 7-7" fill="none" stroke="#14A096" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" /></svg>
           <figure class="m-0 flex flex-col gap-1.5">
@@ -103,7 +104,7 @@ const BADGE = { correct: 'bg-right-mark', wrong: 'bg-wrong-mark', reading: 'bg-l
               <span class="shimmer h-10 w-full rounded-xl" />
               <span class="text-[13px] font-bold text-lagoon">Reading your handwriting…</span>
             </div>
-            <MathTex v-else :key="selected.latex" :latex="selected.latex" class="write-on block text-[38px]" style="--dur: 0.7s" />
+            <ExerciseText v-else :key="selected.latex" :latex="selected.latex" :math="selected.latex.length > 40 ? 'write-on text-[26px]' : 'write-on text-[38px]'" words="text-[20px] font-black text-ink" style="--dur: 0.7s" />
           </figure>
         </div>
 
@@ -221,21 +222,21 @@ const BADGE = { correct: 'bg-right-mark', wrong: 'bg-wrong-mark', reading: 'bg-l
       </div>
     </section>
 
-    <!-- 6. Every line -->
-    <section v-if="state.parts.length > 1" aria-label="Earlier lines" class="flex flex-col gap-2 rounded-[24px] bg-white p-5 shadow-[0_14px_30px_-22px_rgb(24_41_74/0.5)]">
-      <h3 class="text-lg font-black">All lines</h3>
+    <!-- 6. Every exercise -->
+    <section v-if="state.parts.length > 1" aria-label="All exercises" class="flex flex-col gap-2 rounded-[24px] bg-white p-5 shadow-[0_14px_30px_-22px_rgb(24_41_74/0.5)]">
+      <h3 class="text-lg font-black">All exercises</h3>
       <div class="flex flex-wrap gap-2">
         <button
           v-for="p in state.parts"
           :key="p.id"
           type="button"
           :aria-pressed="p.id === selected?.id"
-          class="flex items-center gap-2 rounded-2xl border-2 px-2.5 py-1.5 transition-all"
+          class="flex min-w-0 max-w-full items-center gap-2 rounded-2xl border-2 px-2.5 py-1.5 text-left transition-all"
           :class="p.id === selected?.id ? 'border-lagoon bg-lagoon-mist' : 'border-line bg-white hover:-translate-y-0.5'"
           @click="$emit('select', p.id)"
         >
-          <span class="flex size-6 items-center justify-center rounded-full text-[12px] font-black text-white" :class="BADGE[p.verdict]">{{ p.id }}</span>
-          <MathTex :latex="p.latex" class="text-[16px]" />
+          <span class="flex size-6 shrink-0 items-center justify-center rounded-full text-[12px] font-black text-white" :class="BADGE[p.verdict]">{{ p.id }}</span>
+          <ExerciseText :latex="p.latex" math="text-[16px]" words="text-[14px] font-bold" />
         </button>
       </div>
     </section>

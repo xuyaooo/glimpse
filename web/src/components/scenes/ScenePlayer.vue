@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { titleTex } from '@/lib/latex'
+import ExerciseText from '../ExerciseText.vue'
 // Full screen: the animation big, with the solution beside it. Each step of the solution
 // lights up while Glim says it; pressing a step plays the animation from there. The tutor's
 // complete written working is underneath. Keyboard: ← → steps, space pause, Esc back.
@@ -62,7 +62,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey, true))
           <aside class="flex min-h-0 flex-col gap-3 overflow-hidden rounded-[28px] bg-white p-5 text-ink shadow-2xl" style="animation: slide-in-right 500ms cubic-bezier(0.2, 0.8, 0.2, 1) both">
             <div>
               <p class="text-[12px] font-black uppercase tracking-[0.18em] text-lagoon">The solution</p>
-              <MathTex v-if="player.steps.about" :latex="titleTex(player.steps.about)" class="mt-1 block overflow-x-auto text-[24px]" />
+              <ExerciseText v-if="player.steps.about" :latex="player.steps.about" math="mt-1 text-[24px]" words="mt-1 text-[20px] font-black" />
             </div>
             <ol ref="list" class="relative m-0 flex min-h-0 flex-1 list-none flex-col gap-1 overflow-y-auto p-0 pr-1">
               <li v-for="(st, i) in scene.stages" :key="i" class="relative">

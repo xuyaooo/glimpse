@@ -2,10 +2,10 @@
 // Practise again: after each finished session, Glim suggests a few exercises like the ones done
 // that day (the ones that went wrong first). Do one on paper, then show the answer or watch how
 // it's solved. "I did it" is saved with the session.
+import ExerciseText from './ExerciseText.vue'
 import { computed, ref, watch } from 'vue'
 import MathTex from './MathTex.vue'
 import { state } from '@/lib/engine'
-import { titleTex } from '@/lib/latex'
 import { start } from '@/lib/player'
 import { sceneIcon, sceneLabel } from '@/lib/sceneKinds'
 import type { ReviewItem, SessionReview } from '@/lib/types'
@@ -119,7 +119,7 @@ function watchIt(item: ReviewItem, i: number) {
 
           <!-- the exercise, on a bit of squared paper -->
           <div class="review-paper flex min-h-[76px] items-center justify-center overflow-x-auto rounded-2xl px-3 py-4">
-            <MathTex :latex="titleTex(item.exercise)" :class="/\\text\{/.test(titleTex(item.exercise)) && item.exercise.length > 24 ? 'text-[18px]' : 'text-[26px]'" />
+            <ExerciseText :latex="item.exercise" math="text-[26px]" words="text-[18px] font-black" />
           </div>
           <p class="text-[14px] font-semibold leading-snug text-ink-2">{{ item.why }}</p>
 
