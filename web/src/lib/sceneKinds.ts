@@ -25,11 +25,23 @@ export const SCENE_LABEL: Record<string, string> = {
   chance: 'Chance',
   combinations: 'Choosing',
   tree: 'Tree diagram',
+  syllables: 'Clap the syllables',
+  phonics: 'Sound buttons',
+  spelling: 'Spelling, letter by letter',
+  plural: 'Plurals',
+  sentence: 'Fix the sentence',
+  units: 'The unit ladder',
+  speed: 'Speed, distance, time',
+  density: 'Float or sink',
+  circuit: 'The circuit',
+  states: 'Solid, liquid, gas',
+  food_chain: 'Food chain',
 }
 export const SCENE_ICON: Record<string, string> = {
   count: '🍎', number_line: '🐸', columns: '🧮', groups: '🍪', area_model: '🟦', sharing: '🍬', fractions: '🍕', percent: '💯',
   order_ops: '🪜', powers: '🚀', mean: '📊', balance: '⚖️', inequality: '↔️', pythagoras: '📐', pairs: '🔢', quadratic: '🌈',
   system: '✖️', graph: '📉', trig: '⭕', limit: '🎯', derivative: '⛷️', area: '📈', chance: '🎲', combinations: '🧩', tree: '🌳',
+  syllables: '👏', phonics: '🔤', spelling: '✏️', plural: '🦊', sentence: '📝', units: '📏', speed: '🚗', density: '⛵', circuit: '💡', states: '🧊', food_chain: '🐇',
 }
 export const sceneLabel = (kind?: string) => (kind ? (SCENE_LABEL[kind] ?? 'Animation') : 'Animation')
 export const sceneIcon = (kind?: string) => (kind ? (SCENE_ICON[kind] ?? '✨') : '✨')
@@ -41,6 +53,8 @@ export const TOPIC: Record<string, string> = {
   powers: 'Powers and logarithms', mean: 'Averages', balance: 'Equations', inequality: 'Inequalities', pythagoras: 'Pythagoras',
   pairs: 'Number patterns', quadratic: 'Quadratic equations', system: 'Simultaneous equations', graph: 'Functions and graphs',
   trig: 'Trigonometry', limit: 'Limits', derivative: 'Derivatives', area: 'Integrals', chance: 'Probability', combinations: 'Probability', tree: 'Probability',
+  syllables: 'Syllables', phonics: 'Phonics', spelling: 'Spelling', plural: 'Plurals', sentence: 'Sentences and punctuation',
+  units: 'Units and conversions', speed: 'Speed, distance and time', density: 'Floating and sinking', circuit: 'Electric circuits', states: 'States of matter', food_chain: 'Food chains',
 }
 // free text from the summaries ("Integrals (area under a curve, e.g. ...)") -> one of the topics.
 // The first rule that matches wins: "Sine, cosine and tangent" is trigonometry, not derivatives,
@@ -51,6 +65,9 @@ const MENTION: [RegExp, string][] = [
   [/probab|chance|dice|coin|combination|factorial|tree diagram/i, 'chance'], [/percent/i, 'percent'], [/power|expon|logarithm/i, 'powers'],
   [/fraction|denominator|numerator/i, 'fractions'], [/\bmean\b|average|median/i, 'mean'], [/order of op|bracket/i, 'order_ops'],
   [/equation|solv(e|ing) for x|unknown/i, 'balance'], [/function|graph/i, 'graph'], [/multipl|times table/i, 'groups'], [/divi|shar/i, 'sharing'],
+  [/syllable|clap/i, 'syllables'], [/phonic|sound button|digraph/i, 'phonics'], [/spell/i, 'spelling'], [/plural/i, 'plural'], [/sentence|punctuat|capital letter/i, 'sentence'],
+  [/\bunits?\b|conver|metre|gram|litre/i, 'units'], [/speed|distance/i, 'speed'], [/densit|float|sink/i, 'density'], [/circuit|voltage|current|resist|ohm/i, 'circuit'],
+  [/solid|liquid|\bgas\b|melt|boil|states? of matter/i, 'states'], [/food chain|predator|producer|consumer/i, 'food_chain'],
   [/add|subtract|sum|column/i, 'columns'], [/pattern|1 \+ 2/i, 'pairs'],
 ]
 export function topicOf(text: string): string | null {
@@ -106,6 +123,27 @@ export const CATALOG: { level: string; kinds: { kind: string; what: string; exam
       { kind: 'chance', what: 'Chance: every outcome drawn, the good ones lit up.', examples: ['P(rolling a 6) with a die', 'sum of 7 with two dice', 'two coins: P(two heads)', 'bag with 3 red and 5 blue balls, P(red)'] },
       { kind: 'combinations', what: 'Choosing r out of n, and factorials.', examples: ['\\binom{5}{2}', '\\binom{4}{2}', '5! ='] },
       { kind: 'tree', what: 'Two independent events on a tree diagram.', examples: ['P(A) = 0.5, P(B) = 0.3, P(A and B) independent'] },
+    ],
+  },
+  {
+    level: 'Reading',
+    kinds: [
+      { kind: 'syllables', what: 'Clap the beats of a word: one vowel sound, one syllable.', examples: ['How many syllables in elephant?', 'Split butterfly into syllables', 'clap the word rabbit'] },
+      { kind: 'phonics', what: 'Sound buttons: the letters that make one sound together (sh, igh, a…e), then blend.', examples: ['sound out ship', 'How many sounds in night?', 'phonics: cake'] },
+      { kind: 'spelling', what: 'A misspelled word compared letter by letter with the right one, then in beats.', examples: ['becaus -> because', 'freind should be friend', 'Spell beautiful'] },
+      { kind: 'plural', what: 'One, two: -s, -es, -ies, -ves, and the special words.', examples: ['plural of fox', 'plural of baby', 'plural of child', 'plural of knife'] },
+      { kind: 'sentence', what: 'Capital letters, I, a or an, and the right mark at the end.', examples: ['Punctuate: i have a apple', 'correct the sentence: where is my book', 'fix: the the cat is big'] },
+    ],
+  },
+  {
+    level: 'Science',
+    kinds: [
+      { kind: 'units', what: 'Converting units on a ladder: down is ×, up is ÷.', examples: ['Convert 3.5 km to m', '2500 g in kg', '45 min = ? h', '3 L to mL'] },
+      { kind: 'speed', what: 'Speed, distance and time: the triangle, then the car on the road.', examples: ['A car drives 120 km in 2 hours. What is its speed?', 'How long does it take to drive 150 km at 60 km/h?', 'How far do you go in 3 h at 80 km/h?'] },
+      { kind: 'density', what: 'Density = mass ÷ volume, then into the water: float or sink.', examples: ['A block has a mass of 200 g and a volume of 250 cm3. Does it float?', 'Density of 500 g in 400 mL, float or sink?'] },
+      { kind: 'circuit', what: 'V = I × R in a circuit, resistors in series or in parallel, current flowing.', examples: ['A 9 V battery and a 3 ohm resistor: what is the current?', 'Resistors of 2 ohms and 4 ohms in series with 12 V. Current?', '6 V across two 6 ohm resistors in parallel, current?'] },
+      { kind: 'states', what: 'Solid, liquid or gas at a temperature: the thermometer and the particles.', examples: ['Water at 120 °C: solid, liquid or gas?', 'ice at -5 °C', 'What state is iron at 1600°C?'] },
+      { kind: 'food_chain', what: 'Who eats whom: the energy from the producer to the top predator.', examples: ['grass -> rabbit -> fox', 'food chain: sun → grass → grasshopper → frog → snake → hawk', 'Owls eat mice and mice eat seeds'] },
     ],
   },
 ]

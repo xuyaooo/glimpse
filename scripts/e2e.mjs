@@ -187,11 +187,39 @@ const cases = [
   ['sum of 7 with two dice', 14, 'chance', '\\frac{1}{6}'],
   ['\\binom{5}{2}', 15, 'combinations', '10'],
   ['P(A) = 0.5, P(B) = 0.3, P(A and B) independent', 15, 'tree', '0.15'],
+  // reading
+  ['How many syllables in elephant?', 7, 'syllables', '\\text{el·e·phant}\\;(3)'],
+  ['sound out ship', 6, 'phonics', '\\text{sh·i·p}\\;(3\\text{ sounds})'],
+  ['becaus -> because', 8, 'spelling', '\\text{because}'],
+  ['plural of baby', 7, 'plural', '\\text{babies}'],
+  ['Punctuate: i have a apple', 8, 'sentence', '\\text{I have an apple.}'],
+  // science
+  ['Convert 3.5 km to m', 11, 'units', '3500\\text{ m}'],
+  ['A car drives 120 km in 2 hours. What is its speed?', 12, 'speed', '60\\text{ km/h}'],
+  ['A block has a mass of 200 g and a volume of 250 cm3. Does it float?', 13, 'density', '0.8\\text{ g/cm}^3\\text{, it floats}'],
+  ['A 9 V battery and a 3 ohm resistor: what is the current?', 14, 'circuit', 'I = 3\\,\\text{A}'],
+  ['Water at 120 °C: solid, liquid or gas?', 10, 'states', '\\text{gas (steam)}'],
+  ['grass -> rabbit -> fox', 9, 'food_chain', '\\text{grass} \\to \\text{rabbit} \\to \\text{fox}'],
   ['Write a story about a dog', 9, null, null],
 ]
 for (const [text, age, kind, result] of cases) {
   const sc = await json(`${ENGINE}/api/scene?text=${encodeURIComponent(text)}&age=${age}`)
   check(`${text} -> ${kind ?? 'no animation'}`, sc.kind === kind && (result === null || sc.resultTex === result), sc.kind ? `${sc.kind}/${sc.skin} = ${sc.resultTex}, by ${sc.decidedBy}${sc.laya ? ` (Laya ${Math.round(sc.laya.probability * 100)}%, ${sc.laya.ms} ms)` : ''}` : 'none')
+}
+
+// ---------------------------------------------------------------- 9. other subjects
+console.log('\n9. Reading and Science: the paper is read and checked in every subject')
+{
+  const id = `e2e-science-${Date.now()}`
+  const post = async (event) => {
+    const r = await fetch(`${ENGINE}/api/engine`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionId: id, event }) })
+    const text = await r.text()
+    return text.split('\n').filter(Boolean).map((l) => JSON.parse(l))
+  }
+  await post({ type: 'session_start', student: 'e2e', name: 'Test', lang: 'en', subject: 'science', age: 12 })
+  const ev = await post({ type: 'cut_part', image: photo('fractions.jpg') })
+  const hints = ev.filter((e) => e.type === 'hint' && e.hint).map((e) => e.hint.text)
+  check('a science session reads the paper (no "only maths")', ev.some((e) => e.type === 'page') && !hints.some((h) => /only check maths/i.test(h)), hints.join(' | ').slice(0, 120))
 }
 
 const failed = results.filter((x) => !x.ok)

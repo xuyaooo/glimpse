@@ -4,10 +4,11 @@
 // suggestion is never shown with a wrong answer. The tutor's own ideas are added when the code
 // can check them (or, without an answer, when there is nothing else to suggest).
 import { plainToTex, sceneFor } from './scenes.js'
+import { WORD_KINDS, practiceWord } from './domains.js'
 
 export const REVIEW_MAX = 5
 /** Bumped when the suggestions get better: a session's saved ones are made again (unless one was done). */
-export const REVIEW_VERSION = 5
+export const REVIEW_VERSION = 7
 const REVIEW_MIN = 3
 
 // The same session always gets the same suggestions (a seeded random generator, not Math.random)
@@ -32,9 +33,9 @@ const unwrap = (t) => String(t ?? '').replace(/\$/g, '').replace(/\\[()[\]]/g, '
 export const reviewKey = (t) => unwrap(t).replace(/\\left|\\right|\\[,;! ]|\s|=+$/g, '').toLowerCase()
 const family = (k) => (['count', 'number_line', 'columns'].includes(k) ? 'add' : ['groups', 'area_model'].includes(k) ? 'times' : k)
 
-function build(exercise, age) {
+function build(exercise, age, subject) {
   try {
-    return sceneFor({ exercise, age }) ?? null
+    return sceneFor({ exercise, age, subject }) ?? null
   } catch {
     return null
   }
@@ -46,7 +47,8 @@ function build(exercise, age) {
  * same exercise (it is read as another kind of maths, or not at all).
  */
 export function questionOf(latex, age) {
-  const t = unwrap(latex).replace(/^=+\s*/, '') // "= 17/9 + 8/1": the "=" of a line carried on
+  // "= 17/9 + 8/1": the "=" of a line carried on; "1. 3/4 + 1/8", "b) ...", "Q2: ...": the numbering
+  const t = unwrap(latex).replace(/^=+\s*/, '').replace(/^\s*(?:\(?[0-9]{1,2}[.)]|\(?[a-h]\)|q(?:uestion)?\s*\d+\s*[:.)])\s+/i, '')
   const i = t.lastIndexOf('=')
   if (i < 0) return t
   const left = t.slice(0, i).trim()
@@ -178,10 +180,33 @@ function niceAs(original, variant) {
 }
 
 /** A variant of an exercise that the code can still work out, with an answer like the original's. */
-export function variantOf(question, { age, seed, harder = false, avoid = new Set() } = {}) {
-  const original = build(question, age)
+// A task with another word, for the reading kinds that work on one word
+const WORD_TASK = { syllables: (w) => `How many syllables in ${w}?`, phonics: (w) => `How many sounds in ${w}?`, plural: (w) => `plural of ${w}`, spelling: (w, rand) => `${misspell(w, rand)} -> ${w}` }
+// a likely slip to fix: a double letter written once, a silent e forgotten, two letters swapped
+function misspell(w, rand) {
+  const d = w.search(/([a-z])\1/)
+  if (d >= 0) return w.slice(0, d) + w.slice(d + 1)
+  if (/[^aeiou]e$/.test(w) && w.length > 4) return w.slice(0, -1)
+  const i = 1 + Math.floor(rand() * Math.max(1, w.length - 3))
+  return w.slice(0, i) + w[i + 1] + w[i] + w.slice(i + 2)
+}
+
+export function variantOf(question, { age, seed, harder = false, avoid = new Set(), subject } = {}) {
+  const original = build(question, age, subject)
   if (!original) return null
   const rand = rng(`${seed}:${question}:${harder ? 'h' : 's'}`)
+  // a reading kind on one word: the same thing practised on another word
+  if (WORD_KINDS.includes(original.kind) && original.word) {
+    for (let tries = 0; tries < 8; tries++) {
+      const w = practiceWord(original.kind, original.word, rand)
+      if (!w) return null
+      const text = WORD_TASK[original.kind](w, rand)
+      if (avoid.has(reviewKey(text))) continue
+      const sc = build(text, age)
+      if (sc && sc.kind === original.kind) return { exercise: text, scene: sc, word: true }
+    }
+    return null
+  }
   const bare = (t) => String(t ?? '').replace(/\\approx\s*/g, '').trim()
   const trivial = (t) => /^-?[01](?:\.0+)?$/.test(bare(t))
   const was = bare(original.resultTex)
@@ -189,7 +214,7 @@ export function variantOf(question, { age, seed, harder = false, avoid = new Set
   for (let tries = 0; tries < 24; tries++) {
     const v = vary(question, rand, { harder })
     if (!v || avoid.has(reviewKey(v)) || reviewKey(v) === reviewKey(question)) continue
-    const sc = build(v, age)
+    const sc = build(v, age, subject)
     if (!sc || family(sc.kind) !== family(original.kind) || !niceAs(original, sc)) continue
     const now = bare(sc.resultTex)
     // a real new exercise has a new answer (6 × 7 -> 7 × 6 is not one), and not a give-away 0 or 1
@@ -206,9 +231,10 @@ export function variantOf(question, { age, seed, harder = false, avoid = new Set
 const WHY = {
   again: (note) => (note ? `${youSaid(note)} Try it again, one step at a time.` : 'You got a different answer on this one. Try it again, one step at a time.'),
   unfinished: () => "You didn't finish this one. Try it all the way to the answer.",
-  sameWrong: () => 'The same kind as the one that went wrong, with new numbers.',
-  sameRight: () => 'Like one you got right, with new numbers: keep it fresh.',
+  sameWrong: (word) => `The same kind as the one that went wrong, with ${word ? 'another word' : 'new numbers'}.`,
+  sameRight: (word) => `Like one you got right, with ${word ? 'another word' : 'new numbers'}: keep it fresh.`,
   question: () => 'Like the exercise you asked Glim about.',
+  solved: () => 'Glim showed you how: now try it on your own.',
   harder: () => 'A step further: bigger numbers, same idea.',
 }
 function youSaid(note) {
@@ -234,7 +260,7 @@ const clean = (t, max = 160) => String(t ?? '').replace(/\s+/g, ' ').trim().slic
  * ideas [{ exercise, why }] (plain maths or LaTeX). 3 to 5 exercises when there is enough to go
  * on; each { id, exercise (LaTeX), level, why, kind, answer (LaTeX, or null), scene }.
  */
-export function suggestReview({ seed = '', lines = [], questions = [], ideas = [], age = null } = {}) {
+export function suggestReview({ seed = '', lines = [], questions = [], ideas = [], solved = [], subject = 'maths', age = null } = {}) {
   const items = []
   const seen = new Set()
   const add = (level, exercise, why, scene, from) => {
@@ -242,24 +268,26 @@ export function suggestReview({ seed = '', lines = [], questions = [], ideas = [
     if (!k || seen.has(k) || items.length >= REVIEW_MAX) return false
     seen.add(k)
     // the exercise as the animation reads it (an integral sign the camera read as S, fixed)
-    const shown = pretty(typeof scene?.exerciseTex === 'string' && scene.exerciseTex.trim() ? scene.exerciseTex.trim() : unwrap(exercise))
+    // a word to spell or a sentence to correct is shown as the task, without the answer in it
+    const task = scene?.kind === 'spelling' ? `Fix the spelling: ${scene.attempt ?? scene.word}` : scene?.kind === 'sentence' ? `Correct the sentence: ${scene.original}` : null
+    const shown = task ?? pretty(typeof scene?.exerciseTex === 'string' && scene.exerciseTex.trim() ? scene.exerciseTex.trim() : unwrap(exercise))
     items.push({ id: hash(`${level}:${k}`).toString(36), exercise: shown, level, why: clean(why), kind: scene?.kind ?? null, answer: scene?.resultTex ? String(scene.resultTex) : null, scene: scene ?? null, ...(from ? { from: unwrap(from) } : {}) })
     return true
   }
-  const variant = (q, harder) => variantOf(q, { age, seed, harder, avoid: seen })
+  const variant = (q, harder) => variantOf(q, { age, seed, harder, avoid: seen, subject })
 
   // the student's exercises, newest first, each once: what went wrong, what wasn't finished,
   // what was asked about, what was right
   const done = new Set()
   const sources = []
   const push = (latex, type, note) => {
-    if (!/\d|\\[a-z]|=/i.test(String(latex)) || isResult(latex)) return // words only, or a result: nothing to practise
+    if (isResult(latex)) return // a result written down: nothing to practise
     const question = questionOf(latex, age)
     const k = reviewKey(question)
     if (!k || done.has(k)) return
     done.add(k)
     // only what the code can work out: a line the camera misread ("t × 9", "Decision ①②") is left out
-    const scene = build(question, age)
+    const scene = build(question, age, subject)
     // varied as the animation reads it (S_0^4 read by the camera is \int_0^4)
     const read = typeof scene?.exerciseTex === 'string' && scene.exerciseTex.trim() ? scene.exerciseTex.trim() : question
     if (scene) sources.push({ question: read, type, note, scene, from: latex })
@@ -268,15 +296,18 @@ export function suggestReview({ seed = '', lines = [], questions = [], ideas = [
   for (const l of written) if (l.verdict === 'wrong') push(l.latex, 'wrong', l.note)
   for (const l of written) if (l.verdict === 'unsure') push(l.latex, 'unsure', l.note)
   for (const q of [...questions].reverse()) if (q?.about) push(q.about, 'question')
+  // exercises solved with an animation (a word the tutor corrected: "becaus -> because")
+  for (const text of [...solved].reverse()) if (text) push(text, 'solved')
   for (const l of written) if (l.verdict === 'correct') push(l.latex, 'right')
 
   // 1. one for each exercise of the day
   for (const s of sources) {
     if (s.type === 'wrong') add('again', s.question, WHY.again(s.note), s.scene, s.from)
     else if (s.type === 'unsure') add('again', s.question, WHY.unfinished(), s.scene, s.from)
+    else if (s.type === 'solved') add('again', s.question, WHY.solved(), s.scene, s.from)
     else {
       const v = s.scene && variant(s.question)
-      if (v) add('same', v.exercise, s.type === 'question' ? WHY.question() : WHY.sameRight(), v.scene, s.from)
+      if (v) add('same', v.exercise, s.type === 'question' ? WHY.question() : WHY.sameRight(v.word), v.scene, s.from)
     }
   }
   // 2. the tutor's ideas the code can check
@@ -291,19 +322,19 @@ export function suggestReview({ seed = '', lines = [], questions = [], ideas = [
   }
   // 3. new numbers for what went wrong, then a step further for what was right
   for (const s of sources)
-    if (s.scene && (s.type === 'wrong' || s.type === 'unsure')) {
+    if (s.scene && (s.type === 'wrong' || s.type === 'unsure' || s.type === 'solved')) {
       const v = variant(s.question)
-      if (v) add('same', v.exercise, WHY.sameWrong(), v.scene, s.from)
+      if (v) add('same', v.exercise, WHY.sameWrong(v.word), v.scene, s.from)
     }
   for (const s of sources)
     if (items.length < REVIEW_MIN + 1 && s.scene && (s.type === 'right' || s.type === 'question')) {
-      const v = variant(s.question, true)
+      const v = WORD_KINDS.includes(s.scene.kind) ? null : variant(s.question, true) // a word has no "harder"
       if (v) add('harder', v.exercise, WHY.harder(), v.scene, s.from)
     }
   // a session with one exercise: a step further on it too, once it has been tried again
   for (const s of sources)
     if (items.length < REVIEW_MIN && s.scene) {
-      const v = variant(s.question, true)
+      const v = WORD_KINDS.includes(s.scene.kind) ? null : variant(s.question, true) // a word has no "harder"
       if (v) add('harder', v.exercise, WHY.harder(), v.scene, s.from)
     }
   // 4. still too few: the tutor's ideas without a checked answer, then the day's exercises again

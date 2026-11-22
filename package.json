@@ -6,7 +6,7 @@
   "description": "Glimpse: a webcam maths tutor. Web app (web/), engine (server/), decision model Laya (decide/).",
   "scripts": {
     "setup": "npm install && npm --prefix web ci",
-    "setup:decide": "python3.15 -m venv decide/.venv || python3 -m venv decide/.venv; decide/.venv/bin/pip install -r decide/requirements.txt",
+    "setup:decide": "python3.15 -m venv decide/.venv || python3 -m venv decide/.venv; decide/.venv/bin/python -m pip install -r decide/requirements.txt",
     "dev": "concurrently -k -n engine,glimpse,decide -c blue,magenta,yellow \"node --watch server/index.js\" \"GLIMPSE_ENGINE=http://localhost:3001 npm --prefix web run dev\" \"node scripts/start-decide.js\"",
     "server": "node server/index.js",
     "build": "npm --prefix web run build",

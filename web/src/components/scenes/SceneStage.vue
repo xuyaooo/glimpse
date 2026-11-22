@@ -23,6 +23,17 @@ import PythagorasScene from './PythagorasScene.vue'
 import SharingScene from './SharingScene.vue'
 import TreeScene from './TreeScene.vue'
 import TrigScene from './TrigScene.vue'
+import SyllablesScene from './SyllablesScene.vue'
+import PhonicsScene from './PhonicsScene.vue'
+import SpellingScene from './SpellingScene.vue'
+import PluralScene from './PluralScene.vue'
+import SentenceScene from './SentenceScene.vue'
+import UnitsScene from './UnitsScene.vue'
+import SpeedScene from './SpeedScene.vue'
+import DensityScene from './DensityScene.vue'
+import CircuitScene from './CircuitScene.vue'
+import StatesScene from './StatesScene.vue'
+import FoodChainScene from './FoodChainScene.vue'
 
 const props = defineProps<{ scene: Scene; stage: number }>()
 const VIEW: Record<string, unknown> = {
@@ -30,6 +41,10 @@ const VIEW: Record<string, unknown> = {
   fractions: FractionScene, percent: PercentScene, order_ops: OrderOpsScene, powers: PowersScene, mean: MeanScene, balance: BalanceScene,
   inequality: InequalityScene, pythagoras: PythagorasScene, pairs: PairsScene, chance: ChanceScene, combinations: CombinationsScene, tree: TreeScene,
   trig: TrigScene, area: PlotScene, graph: PlotScene, quadratic: PlotScene, limit: PlotScene, derivative: PlotScene, system: PlotScene,
+  // reading
+  syllables: SyllablesScene, phonics: PhonicsScene, spelling: SpellingScene, plural: PluralScene, sentence: SentenceScene,
+  // science
+  units: UnitsScene, speed: SpeedScene, density: DensityScene, circuit: CircuitScene, states: StatesScene, food_chain: FoodChainScene,
 }
 const view = computed(() => VIEW[props.scene.kind] as never)
 const BG = {

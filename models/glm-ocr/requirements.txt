@@ -1,0 +1,8 @@
+# For finetune_lora.py and the notebook. decide/.venv (Laya's) already has torch and transformers:
+#   decide/.venv/bin/python -m pip install -r models/glm-ocr/requirements.txt
+torch
+torchvision
+transformers>=5
+peft
+pillow
+accelerate

@@ -398,7 +398,7 @@ function withoutAnswer(latex: string) {
 
 /** The topic to show: what was recognised on the paper, not a fixed one. */
 export function topicLabel(fallback: string) {
-  if (state.subject !== 'maths' || state.connection === 'demo') return fallback // the scripted demo is about fractions
+  if (state.connection === 'demo') return fallback // the scripted demo is about fractions
   return state.topic?.label ?? 'Any exercise'
 }
 
@@ -422,6 +422,7 @@ export function startSession(studentId: string) {
 export function chooseSubject(subject: SubjectId) {
   if (subject === state.subject) return
   state.subject = subject
+  state.topic = null // what was recognised belongs to the other subject
   if (state.student) send({ type: 'subject', subject })
 }
 

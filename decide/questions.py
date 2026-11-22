@@ -1,7 +1,7 @@
-# The typed questions Laya answers about a maths exercise (shared by the service and its tests).
+# The typed questions Laya answers about an exercise, in maths, reading or science (shared by the service and its tests).
 ANIMATION = {
     "type": "choice",
-    "instructions": "Which animation best explains this maths exercise?",
+    "instructions": "Which animation best explains this exercise?",
     "criteria": {
         "count": "adding or taking away small whole numbers, like 3 + 4 or 9 - 2",
         "number_line": "adding or subtracting two-digit whole numbers, like 27 + 15 or 83 - 38",
@@ -28,7 +28,18 @@ ANIMATION = {
         "chance": "probability with dice, coins or coloured balls in a bag",
         "combinations": "combinations or factorials, choosing r out of n, like C(5,2) or 5!",
         "tree": "probability of two independent events both happening, a tree diagram",
-        "none": "anything else: words, proofs, geometry, names, dates, or not maths",
+        "syllables": "splitting a word into syllables, clapping its beats, like elephant: el-e-phant",
+        "phonics": "the sounds in a word, phonics, sound buttons, like the sounds in ship",
+        "spelling": "spelling a word, or correcting a misspelled word, like becaus -> because",
+        "plural": "the plural of a word, like one fox, two foxes",
+        "sentence": "a sentence to correct: capital letters, full stops, question marks, a or an",
+        "units": "converting units of length, mass, capacity or time, like 3.5 km to m",
+        "speed": "speed, distance and time, like a car driving 120 km in 2 hours",
+        "density": "density, whether something floats or sinks, from its mass and volume",
+        "circuit": "an electric circuit: voltage, current and resistance, Ohm's law V = I x R",
+        "states": "states of matter: solid, liquid or gas at a temperature, melting and boiling",
+        "food_chain": "a food chain: who eats whom, producers and consumers",
+        "none": "anything else: proofs, geometry, names, dates, headings, instructions",
     },
 }
 LEVEL = {

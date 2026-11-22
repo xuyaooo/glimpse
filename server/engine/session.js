@@ -9,6 +9,7 @@ import { decodeJpeg, drawRing, resizeRgba, toJpegBase64 } from '../images.js'
 import { complete } from '../llm.js'
 import { sceneFor, texToPlain, compile } from './scenes.js'
 import { REVIEW_VERSION, suggestReview } from './review.js'
+import { DOMAIN_KINDS } from './domains.js'
 
 export const ENGINE_VERSION = 'hackathon-engine-1'
 
@@ -213,6 +214,33 @@ Example, for 1/2 + 1/3 = ?
 - good hint: "Halves and thirds are different sizes, so make them the same: both fit into sixths. 1/2 = 3/6. What is 1/3 in sixths?"
 - bad hint (too vague): "Think about fractions."`
 
+// The same tutor for the other subjects on the desk ("Choose a practice")
+const SUBJECT_INTRO = {
+  maths: TUTOR_INTRO,
+  reading: `You are Glim, a kind, patient reading and writing tutor. The student is often a child: use short, simple words. Help with spelling, the sounds and syllables of words, plurals, capital letters and punctuation, and questions about a text. Be concrete: use the actual words from the page.
+Example, for the word "becaus":
+- good hint: "Nearly! Say it slowly: be-cause. Which letter do you see at the very end of 'cause'?"
+- bad hint (too vague): "Check your spelling."`,
+  science: `You are Glim, a kind, patient science tutor. The student is often a child: use short, simple words and everyday examples. Help with units and conversions, speed, floating and sinking (density), electric circuits, solids, liquids and gases, living things and food chains. Be concrete: use the actual numbers and units from the page, and always write the units.
+Example, for "A car drives 120 km in 2 hours. Speed = 240":
+- good hint: "Speed is distance divided by time. How far does the car go in ONE hour?"
+- bad hint (too vague): "Think about speed."`,
+}
+const tutorIntro = (s) => SUBJECT_INTRO[s.subject] ?? TUTOR_INTRO
+const SUBJECT_NAME = { maths: 'maths', reading: 'reading and writing', science: 'science' }
+const SUBJECT_WORK = { maths: "the student's maths", reading: "the student's writing: words, sentences, answers", science: "the student's work: answers, calculations, labels" }
+const SUBJECT_CHECK = {
+  maths: '',
+  reading: '\nIn reading, "correct" means spelt and punctuated right; "wrong" means a spelling, capital letter, punctuation or grammar mistake (the note says which).',
+  science: '\nIn science, check the numbers, the units and the facts: a missing or wrong unit is a mistake.',
+}
+// how the worked solution starts, per subject (sendSteps)
+const SOLVE_INTRO = {
+  maths: 'You are Glim, a maths tutor. Solve the exercise completely and correctly, step by step, the way you would show it to a student on the board: 3 to 6 steps.',
+  reading: 'You are Glim, a reading and writing tutor. Correct or answer the exercise step by step, the way you would show it to a student: 2 to 5 steps (the rule, then how it applies here). For a word, "result" is the word spelt correctly, only the word; for a sentence, the corrected sentence; for a question, the answer.',
+  science: 'You are Glim, a science tutor. Solve or explain the exercise completely and correctly, step by step: 3 to 6 steps, with the units at every step. "result" is the answer with its unit.',
+}
+
 const PAGE_SCHEMA = {
   type: 'object',
   properties: {
@@ -274,6 +302,9 @@ function similarity(a, b) {
 }
 const numbered = (lines) => lines.map((l, i) => `${i + 1}. ${l}`).join('\n')
 const looksMathy = (l) => /\d/.test(l) && /[+\-=×÷*/^_]|\\[a-z]+/.test(l)
+// in reading and science, any written line is work (not headings like "Name:" or "Exercise 2")
+const looksWritten = (l) => /[A-Za-z0-9]{2,}/.test(l) && !/^\s*(name|date|class|page|exercise|question|chapter|unit)\b\s*[:\d]/i.test(l)
+const looksWork = (s, l) => (s.subject && s.subject !== 'maths' ? looksWritten(l) : looksMathy(l))
 
 // ---------- which line of the paper is which ----------
 //
@@ -388,20 +419,20 @@ async function analyzePage(s, read, frameDataUrl, emit) {
     return
   }
   // OCR reads top to bottom: the newest line is (usually) the last line with maths in it
-  const newest = read.lines.findLastIndex(looksMathy)
+  const newest = read.lines.findLastIndex((l) => looksWork(s, l))
   let out
   try {
     out = await complete('tutor', {
       messages: [
         {
           role: 'system',
-          content: `${TUTOR_INTRO}
+          content: `${tutorIntro(s)}
 You get a photo of the student's paper and its transcription by an OCR model, line by line. The transcription is what is written: do not re-read or correct it. Use the photo only to see the layout (what is handwritten, what is printed, what belongs together).
 For every transcribed line return:
 - "n": its number;
-- "kind": "work" (the student's maths) or "printed" (headings, names, page numbers, printed instructions);
+- "kind": "work" (${SUBJECT_WORK[s.subject] ?? SUBJECT_WORK.maths}) or "printed" (headings, names, page numbers, printed instructions);
 - "verdict": "correct", "wrong", "unfinished" (it ends with "=" or has no result yet) or "unsure" (it can't be checked);
-- "note", only when wrong: the mistake, short, phrased to follow "you", e.g. "added the tops and the bottoms".
+- "note", only when wrong: the mistake, short, phrased to follow "you", e.g. "added the tops and the bottoms".${SUBJECT_CHECK[s.subject] ?? ''}
 Then "feedback": what Glim says to the student about their LAST line of work, in ${LANG_NAME[lang]}, at most 2 short sentences.
 - correct: say so briefly, and what could come next;
 - wrong: say what went wrong and how to fix it;
@@ -424,7 +455,7 @@ Write maths in the feedback as plain text that can be read aloud (e.g. 1/(1+x), 
   const work = []
   read.lines.forEach((line, i) => {
     const j = judged.find((l) => l?.n === i + 1)
-    const kind = j?.kind || (looksMathy(line) ? 'work' : 'printed')
+    const kind = j?.kind || (looksWork(s, line) ? 'work' : 'printed')
     if (kind === 'work') work.push({ line, j })
   })
   if (!work.length) {
@@ -664,7 +695,7 @@ export async function previewScene(exercise, age) {
 async function decideScene(s, exercise, extra = {}) {
   const laya = await askLaya('/decide', { text: exercise })
   if (laya) s.ai.decisions = (s.ai.decisions || 0) + 1
-  const scene = sceneFor({ exercise, kind: laya?.kind, age: s.age, ...extra })
+  const scene = sceneFor({ exercise, kind: laya?.kind, age: s.age, subject: s.subject, ...extra })
   return scene && { ...scene, laya: laya ? { kind: laya.kind, probability: laya.probability, ms: laya.ms } : null }
 }
 // Test traffic (QA, npm run e2e and e2e:failures) never changes what Laya has learned.
@@ -710,7 +741,7 @@ async function sendSteps(s, exercise, emit, { reason = 'line', image } = {}) {
     messages: [
       {
         role: 'system',
-        content: `You are Glim, a maths tutor. Solve the exercise completely and correctly, step by step, the way you would show it to a student on the board: 3 to 6 steps.${ageNote(s)}
+        content: `${SOLVE_INTRO[s.subject] ?? SOLVE_INTRO.maths}${ageNote(s)}
 For each step:
 - "say": what we do and why, in ${LANG_NAME[lang]}, one or two short, simple sentences, plain text (maths written like 1/(1+x) or x², not LaTeX);
 - "math": the line written at this step, in LaTeX (without $).
@@ -738,6 +769,10 @@ Compute carefully and check the result before answering.`,
       sceneText = clean
     }
   }
+  // a word to spell: its animation needs the right spelling, which the tutor has just given
+  if (!sc && s.subject === 'reading' && typeof out?.json?.result === 'string') {
+    sc = await decideScene(s, exercise, { answer: unwrap(out.json.result) }).catch(() => null)
+  }
   // the integral animation can show F(b) - F(a) once the tutor gives an antiderivative (checked there)
   if (sc?.kind === 'derivative' && !sc.formula && out?.json?.derivative) {
     const better = sceneFor({ exercise, kind: 'derivative', age: s.age, derivative: out.json.derivative })
@@ -761,7 +796,7 @@ Compute carefully and check the result before answering.`,
   const tutorResult = typeof out?.json?.result === 'string' ? unwrap(out.json.result) : ''
   let result = sc?.resultTex || tutorResult
   let dropped = false
-  if (sc && tutorResult && sc.kind !== 'graph') {
+  if (sc && tutorResult && sc.kind !== 'graph' && !DOMAIN_KINDS.includes(sc.kind)) {
     const agree = compareResults(sc.resultTex, tutorResult)
     if (agree === 'differ' && sceneIsWritten(sc, sceneText)) items = []
     else if (agree === 'differ') {
@@ -780,6 +815,9 @@ Compute carefully and check the result before answering.`,
       emit({ type: 'topic', topic: s.topic })
     }
     teachLaya(s, sceneText, sc)
+    // for Practise again: the exercise as its animation reads it (a spelling as "becaus -> because")
+    const again = sc.kind === 'spelling' ? (sc.attempt ? `${sc.attempt} -> ${sc.word}` : `spell ${sc.word}`) : sceneText
+    s.solved = [...(s.solved || []).filter((x) => x !== again), again].slice(-20)
   }
   if (!items.length && !sc && !dropped) {
     s.stepsFor = null
@@ -814,6 +852,8 @@ const TOPIC = {
   powers: 'Powers and logarithms', mean: 'Averages', balance: 'Equations', inequality: 'Inequalities', pythagoras: 'Pythagoras',
   pairs: 'Number patterns', quadratic: 'Quadratic equations', system: 'Simultaneous equations', graph: 'Functions and graphs',
   trig: 'Trigonometry', limit: 'Limits', derivative: 'Derivatives', area: 'Integrals', chance: 'Probability', combinations: 'Combinations', tree: 'Probability trees',
+  syllables: 'Syllables', phonics: 'Phonics', spelling: 'Spelling', plural: 'Plurals', sentence: 'Sentences and punctuation',
+  units: 'Units and conversions', speed: 'Speed, distance and time', density: 'Floating and sinking', circuit: 'Electric circuits', states: 'States of matter', food_chain: 'Food chains',
 }
 
 // What kind of maths this is (Laya + the parsers), shown as the topic everywhere in the app.
@@ -947,6 +987,8 @@ const MENTION = {
   mean: /average|\b(?:the|a|arithmetic) mean\b|\bmeans? of\b|\bmean,? median/i, balance: /equation/i, inequality: /inequal/i, pythagoras: /pythag|triangle/i, pairs: /1 \+ 2|\bsums?\b|pattern/i,
   quadratic: /quadratic|parabola/i, system: /simultaneous|system|two equations/i, graph: /graph|function/i, trig: /\btrig|\bsin(?:e|es)?\b|\bcos(?:ine)?\b|\btan(?:gent)?\b/i, limit: /\blimit/i,
   derivative: /derivative|slope|tangent/i, area: /integral|area under|calculus/i, chance: /probab|chance/i, combinations: /combination|choos|factorial/i, tree: /tree|probab/i,
+  syllables: /syllable|\bbeats?\b|clap/i, phonics: /phonic|sounds?\b|digraph/i, spelling: /spell/i, plural: /plural/i, sentence: /sentence|punctuat|capital/i,
+  units: /\bunits?\b|conver|metre|gram|litre/i, speed: /speed|distance/i, density: /densit|float|sink/i, circuit: /circuit|voltage|current|resist|ohm/i, states: /solid|liquid|\bgas\b|melt|boil|states? of matter/i, food_chain: /food chain|predator|producer|consumer/i,
 }
 const str = (v) => (typeof v === 'string' && v.trim() ? v.trim() : '')
 
@@ -987,7 +1029,7 @@ async function summarize(s, emit) {
         messages: [
           {
             role: 'system',
-            content: `You are Glim, a kind maths tutor, writing the end-of-session summary for ${s.name || 'the student'}${s.age ? `, ${s.age} years old` : ''}. In ${LANG_NAME[lang]}, plain text (maths like 1/2 + 1/3, not LaTeX), short and warm, talking to the student as "you":
+            content: `You are Glim, a kind ${SUBJECT_NAME[s.subject] ?? 'maths'} tutor, writing the end-of-session summary for ${s.name || 'the student'}${s.age ? `, ${s.age} years old` : ''}. In ${LANG_NAME[lang]}, plain text (maths like 1/2 + 1/3, not LaTeX), short and warm, talking to the student as "you":
 - "title": a short, happy title for today${lang === 'en' ? ' (e.g. "Fraction explorer!")' : `, in ${LANG_NAME[lang]}`};
 - "praise": one or two sentences about what went well, specific to what they did;
 - "practised": 1 to 4 short topics practised today, covering every kind of maths listed below (all pages, not only the last);
@@ -1042,7 +1084,7 @@ Only use what is in the session below; don't invent results. When you describe a
   // (the ones that went wrong first), and the tutor's ideas the code can check
   let review = []
   try {
-    review = suggestReview({ seed: s.id, lines: lines.map((p) => ({ latex: p.latex || p.raw, verdict: p.verdict, note: p.note })), questions: s.questions, ideas: ideas.map((r) => ({ ...r, why: lang === 'en' ? neutralize(r.why, s.name) : r.why })), age: s.age })
+    review = suggestReview({ seed: s.id, lines: lines.map((p) => ({ latex: p.latex || p.raw, verdict: p.verdict, note: p.note })), questions: s.questions, ideas: ideas.map((r) => ({ ...r, why: lang === 'en' ? neutralize(r.why, s.name) : r.why })), solved: s.solved ?? [], subject: s.subject, age: s.age })
   } catch (err) {
     console.warn('[review]', err.message)
   }
@@ -1112,7 +1154,7 @@ async function answerPointing(s, e, emit) {
       messages: [
         {
           role: 'system',
-          content: `${TUTOR_INTRO}
+          content: `${tutorIntro(s)}
 The student points at their paper with a finger${hasTip ? ' (a red circle on the photo marks the fingertip)' : ''} and asks a question. You get the photo and the OCR transcription of the whole paper. The transcription is what is written: trust it over your own reading of the photo.
 Return:
 - "pointed": the line or exercise the finger points at, copied from the transcription (LaTeX, without $). If the finger is on part of an exercise, the whole exercise;
@@ -1143,7 +1185,7 @@ Return:
   s.questions.push({ text, lang: s.lang, about, answer: answer.text, at: Date.now() })
   emit({ type: 'answer', answer })
   remember(s, { kind: 'question', ref: `q:${s.questions.length}`, data: { text, about: about ?? null, answer: answer.text, photo: thumbnail(e.image) } })
-  if (about && looksMathy(about)) await sendSteps(s, about, emit, { reason: 'question' })
+  if (about && looksWork(s, about)) await sendSteps(s, about, emit, { reason: 'question' })
 }
 
 // ---------- questions ----------
@@ -1179,7 +1221,7 @@ async function answerQuestion(s, text, partId, emit) {
         messages: [
           {
             role: 'system',
-            content: `You are Glim, a kind maths tutor for children. Answer in ${LANG_NAME[lang]}, in at most 2 short, simple sentences. Explain the idea; do not just give the final answer.${lang !== 'en' ? ' Also give an English translation.' : ''}`,
+            content: `You are Glim, a kind ${SUBJECT_NAME[s.subject] ?? 'maths'} tutor for children. Answer in ${LANG_NAME[lang]}, in at most 2 short, simple sentences. Explain the idea; do not just give the final answer.${lang !== 'en' ? ' Also give an English translation.' : ''}`,
           },
           { role: 'user', content: `${context}\nThe child asks: "${text}"` },
         ],
@@ -1225,10 +1267,6 @@ export async function handle(state, e, emit) {
       s.subject = e.subject
       return s
     case 'cut_part': {
-      if (s.subject !== 'maths') {
-        emit({ type: 'hint', hint: s.lang === 'fr' ? { text: 'Pour l’instant je ne vérifie que les maths. Choisis Maths pour essayer.', lang: 'fr', translation: 'For now I only check maths. Pick Maths to try it.' } : { text: 'For now I only check maths. Pick Maths to try it.', lang: 'en' } })
-        return s
-      }
       if (!e.image) {
         emit({ type: 'hint', hint: say(s, 'no_new_line') })
         return s

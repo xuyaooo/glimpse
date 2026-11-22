@@ -51,6 +51,7 @@ const MATH_WORDS = /^(sin|cos|tan|log|lim|sqrt|frac|dfrac|int|exp|ln|cases|begin
 export function titleTex(about: string | undefined | null) {
   const t = String(about ?? '').trim()
   if (!t || t.includes('\\text{')) return t
-  const words = t.replace(/\\[a-zA-Z]+/g, ' ').match(/[a-zA-Z]{3,}/g) ?? []
+  // words of two letters or more count too ("2500 g in kg", "3 L to mL"), not single letters (x, y, f)
+  const words = t.replace(/\\[a-zA-Z]+/g, ' ').split(/[^a-zA-Z]+/).filter((w) => w.length >= 2)
   return words.some((w) => !MATH_WORDS.test(w)) ? `\\text{${t.replace(/[{}\\]/g, '')}}` : t
 }

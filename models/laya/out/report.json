@@ -1,0 +1,74 @@
+{
+ "examples": 5124,
+ "kinds": 37,
+ "scores": {
+  "trained head: held-out exercises": "56/57",
+  "trained head: edge cases": "24/26",
+  "trained head: reading and science": "20/20",
+  "example vote (k-NN): held-out exercises": "54/57",
+  "example vote (k-NN): edge cases": "22/26",
+  "example vote (k-NN): reading and science": "20/20"
+ },
+ "mistakes": {
+  "trained head: held-out exercises": [
+   {
+    "text": "$1 \\times 100 = 100$",
+    "expected": "groups",
+    "got": "area_model"
+   }
+  ],
+  "trained head: edge cases": [
+   {
+    "text": "What time is it?",
+    "expected": "none",
+    "got": "graph"
+   },
+   {
+    "text": "21/11/2026",
+    "expected": "none",
+    "got": "pythagoras"
+   }
+  ],
+  "trained head: reading and science": [],
+  "example vote (k-NN): held-out exercises": [
+   {
+    "text": "$7001 - 2456 =$",
+    "expected": "columns",
+    "got": "number_line"
+   },
+   {
+    "text": "Name: Noor",
+    "expected": "none",
+    "got": "spelling"
+   },
+   {
+    "text": "Find the area of the triangle",
+    "expected": "none",
+    "got": "units"
+   }
+  ],
+  "example vote (k-NN): edge cases": [
+   {
+    "text": "What time is it?",
+    "expected": "none",
+    "got": "states"
+   },
+   {
+    "text": "Factors of 12: 1, 2, 3, 4, 6, 12",
+    "expected": "none",
+    "got": "mean"
+   },
+   {
+    "text": "Find the perimeter of a rectangle 5 cm by 3 cm",
+    "expected": "none",
+    "got": "density"
+   },
+   {
+    "text": "21/11/2026",
+    "expected": "none",
+    "got": "groups"
+   }
+  ],
+  "example vote (k-NN): reading and science": []
+ }
+}

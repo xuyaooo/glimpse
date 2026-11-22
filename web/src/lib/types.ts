@@ -40,6 +40,8 @@ export interface Scene {
     | 'count' | 'number_line' | 'columns' | 'groups' | 'area_model' | 'sharing' | 'fractions' | 'percent' | 'order_ops' | 'powers'
     | 'mean' | 'balance' | 'inequality' | 'pythagoras' | 'pairs' | 'quadratic' | 'system' | 'graph' | 'trig' | 'limit' | 'derivative'
     | 'area' | 'chance' | 'combinations' | 'tree'
+    | 'syllables' | 'phonics' | 'spelling' | 'plural' | 'sentence'
+    | 'units' | 'speed' | 'density' | 'circuit' | 'states' | 'food_chain'
   skin: 'kid' | 'junior' | 'grown'
   stages: SceneStage[]
   resultTex: string

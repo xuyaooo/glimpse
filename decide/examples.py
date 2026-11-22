@@ -3,7 +3,9 @@
 # from the OCR (\frac{1}{2}) and as plain text (1/2).
 import random
 
-KINDS = ["count", "number_line", "columns", "groups", "area_model", "sharing", "fractions", "percent", "order_ops", "powers", "mean", "balance", "inequality", "pythagoras", "pairs", "quadratic", "system", "graph", "trig", "limit", "derivative", "area", "chance", "combinations", "tree", "none"]
+from examples_domains import READING_KINDS, SCIENCE_KINDS, generate_domains
+
+KINDS = ["count", "number_line", "columns", "groups", "area_model", "sharing", "fractions", "percent", "order_ops", "powers", "mean", "balance", "inequality", "pythagoras", "pairs", "quadratic", "system", "graph", "trig", "limit", "derivative", "area", "chance", "combinations", "tree", *READING_KINDS, *SCIENCE_KINDS, "none"]
 
 
 def generate(seed=7, per_kind=40):
@@ -95,14 +97,14 @@ def generate(seed=7, per_kind=40):
         "Use a ruler", "Tick the correct answer", "Fill in the missing numbers", "Answer all the questions", "Do not use a calculator",
         "Marks: 3", "Great work!", "Excellent!", "Try again", "See me", "Score: 7/10", "8 out of 10", "Total: 25 marks",
         "= 12 cm", "Answer: 42", "x = 75°", "x = 130°", "y = 110°", "a = 35°", "Angle ABC = 40°", "Area = 8 x 2 = 16 cm²",
-        "Convert 250 cm to metres", "How many grams are in 2 kg?", "5 m = 500 cm", "2 kg = 2000 g", "1 hour = 60 minutes",
-        "How many minutes are in 3 hours?", "Change 4.5 litres to millilitres", "1.2 km in metres", "It is half past four",
+        
+        "It is half past four",
         "What time does the train leave?", "3:45 pm",
         "Is 21 a prime number?", "23 is a prime number", "List the prime numbers up to 30", "Factors of 18",
         "The factors of 20 are 1, 2, 4, 5, 10, 20", "Multiples of 6: 6, 12, 18, 24", "Write the first five multiples of 9",
         "HCF of 24 and 36", "LCM of 3 and 5", "Is 45 even or odd?", "Square numbers: 1, 4, 9, 16", "Prime factors of 60",
         "Factors of 15: 1, 3, 5, 15", "The factors of 8 are 1, 2, 4 and 8", "Is 9 prime?", "41 is prime", "Round 3,752 to the nearest thousand",
-        "2 hours = 120 minutes", "Convert 90 seconds to minutes",
+        
         "Round 456 to the nearest ten", "Round 2.718 to 1 decimal place", "Write 0.4 as a fraction", "Write 3/5 as a decimal",
         "What is the value of the 7 in 4721?", "Write 6305 in words", "Order these numbers: 0.5, 0.05, 0.55", "Simplify 10/15",
         "Find the perimeter of the rectangle", "Perimeter of a square with side 6 cm", "Area of a rectangle 7 cm by 4 cm",
@@ -114,4 +116,7 @@ def generate(seed=7, per_kind=40):
         "Ben has 2 red balloons and 4 green balloons. How many balloons are there?", "Ali buys 4 pencils at 30p each. How much does he spend?",
         "Once upon a time", "I like football", "Read pages 4 to 6", "Bring your PE kit",
     )
+    add("units", "Convert 250 cm to metres", "How many grams are in 2 kg?", "How many minutes are in 3 hours?", "Change 4.5 litres to millilitres", "1.2 km in metres", "Convert 90 seconds to minutes")
+    # Reading and Science (examples_domains.py)
+    out += generate_domains(random.Random(seed + 4), per_kind)
     return out

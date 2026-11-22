@@ -1,0 +1,6 @@
+# Datasets are photos and words of children: they never leave this computer.
+data/
+.venv/
+# Trained weights are big; Laya's small head and its report are kept.
+out/
+!laya/out/

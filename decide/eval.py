@@ -1,5 +1,6 @@
 # How well Laya picks the animation, on exercises it was not taught with.
 import time
+from examples_domains import DOMAIN_CASES
 from laya_service import Decider
 
 CASES = [
@@ -24,7 +25,7 @@ CASES = [
 # confident wrong kind) and the same exercise written another way (the OCR's braces and spaces, typed symbols).
 EDGE_CASES = [
     ("", "none"), ("$ $", "none"), ("\\quad", "none"), ("...", "none"), ("0", "none"), ("= 0", "none"), ("= 0.5", "none"), ("= \\frac{1}{2}", "none"),
-    ("Convert 3 km to metres", "none"), ("Is 17 a prime number?", "none"), ("Homework due Friday 28th", "none"), ("What time is it?", "none"),
+    ("Convert 3 km to metres", "units"), ("Is 17 a prime number?", "none"), ("Homework due Friday 28th", "none"), ("What time is it?", "none"),
     ("Factors of 12: 1, 2, 3, 4, 6, 12", "none"), ("Find the perimeter of a rectangle 5 cm by 3 cm", "none"), ("21/11/2026", "none"),
     ("\\lim_{x \\to 1} \\frac{x^{2} - 1}{x - 1}", "limit"), ("\\lim_{x \\to \\infty} \\frac{x^{2} + 1}{2x^{2}}", "limit"),
     ("\\frac {1}{2} + \\frac {1}{3} =", "fractions"), ("\\frac{2^{2}}{3} + \\frac{1}{3} =", "fractions"), ("c = \\sqrt{6^{2} + 8^{2}}", "pythagoras"),
@@ -51,4 +52,7 @@ if __name__ == "__main__":
     print("\n".join(wrong))
     ok, _, wrong = score(d, EDGE_CASES)
     print(f"edge cases: {ok}/{len(EDGE_CASES)} right")
+    print("\n".join(wrong))
+    ok, _, wrong = score(d, DOMAIN_CASES)
+    print(f"reading and science: {ok}/{len(DOMAIN_CASES)} right")
     print("\n".join(wrong))

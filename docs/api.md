@@ -11,6 +11,9 @@ Glimpse's protocol (`docs/protocol.md`, shapes in `web/src/lib/types.ts`) over H
 | `GET /api/students`, `GET /api/students/:id` | Dashboard summaries (`StudentSummary`, `web/src/lib/mock.ts`) built from stored sessions (each student's 50 newest). |
 | `GET /api/history?student=&kinds=&limit=&before=&beforeRef=` | Saved records, newest first: `[{ ref, sessionId, studentId, kind, at, data }]`. `student`: one id (repeating it is a 400). `kinds`: `line,question` or `kinds=line&kinds=question`. `limit`: 1–500 (default 100). Next page: `before` = the last record's `at` and `beforeRef` = its `ref`. |
 | `GET /api/history/sessions/:id` | Everything recorded in one session, in order. |
+| `GET /api/review?student=` | Practise again: per finished session, newest first, `[{ ref, sessionId, at, title, items: [{ id, exercise, level, why, kind, answer, scene, done? }] }]`. Sessions that ended before suggestions existed get them on first call (made from their saved lines, then kept). See [practise-again.md](practise-again.md). |
+| `POST /api/review/done` `{ ref, id, done }` | "I did it" on one suggested exercise (saved with its session). 400 on a bad body, 404 for an unknown exercise. |
+| `GET /api/scene?text=&age=` | The animation Laya and the rules pick for a text (maths, reading or science), as the app would play it. Used by the Animations page and the tests. |
 
 There is no login: anyone who can reach these routes can read every student's records (see README, "No login").
 

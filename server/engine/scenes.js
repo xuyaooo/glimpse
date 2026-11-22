@@ -14,17 +14,22 @@
 //   area         definite integral                     -                   shaded area under the curve
 //   graph        a function of x                       -                   its graph, crossings
 
-export const SCENE_KINDS = [
+import { DOMAIN_KINDS, DOMAIN_LEVEL, buildDomain, detectDomain, wordRule, WORD_KINDS } from './domains.js'
+
+export const MATHS_KINDS = [
   'count', 'number_line', 'columns', 'groups', 'area_model', 'sharing', 'fractions', 'percent', 'order_ops', 'powers',
   'mean', 'balance', 'inequality', 'pythagoras', 'pairs', 'quadratic', 'system', 'graph', 'trig', 'limit', 'derivative',
   'area', 'chance', 'combinations', 'tree',
 ]
+// Reading and Science (domains.js): the same contract, built there
+export const SCENE_KINDS = [...MATHS_KINDS, ...DOMAIN_KINDS]
 
 // How advanced each kind is (decides the look with the child's age).
 const LEVEL = {
   count: 1, number_line: 1, columns: 1, groups: 1, sharing: 1, area_model: 2, fractions: 2, pairs: 2, percent: 2, mean: 2,
   order_ops: 2, chance: 2, powers: 3, balance: 3, inequality: 3, pythagoras: 3, combinations: 3, tree: 3,
   quadratic: 4, system: 4, graph: 4, trig: 4, limit: 5, derivative: 5, area: 5,
+  ...DOMAIN_LEVEL,
 }
 
 /** 'kid' (pictures, objects), 'junior' (bars, lines, blocks) or 'grown' (graphs, algebra). */
@@ -2003,6 +2008,10 @@ function fracSum(expr) {
 }
 
 export function detectScene(text) {
+  // Reading and Science first: their rules only answer to their own words and units
+  // ("syllables in…", "3.5 km to m", "a 9 V battery"), so maths is never taken for them
+  const domain = detectDomain(text)
+  if (domain) return domain
   // runs of spaces are one space (line breaks are kept: they separate the equations of a system)
   let src = String(text ?? '').replace(/\$/g, '').replace(/[^\S\n]+/g, ' ').replace(/ ?\n ?/g, '\n').trim()
   if (src.length > MAX_EXERCISE) return null
@@ -2069,6 +2078,7 @@ export function buildScene(choice, { age } = {}) {
   if (!choice || !SCENE_KINDS.includes(choice.kind)) return null
   const kind = choice.kind
   const skin = skinFor(kind, age)
+  if (DOMAIN_KINDS.includes(kind)) return buildDomain(choice, skin)
   const expr = toExpr(choice.expression ?? '')
   try {
     if (kind === 'count' || kind === 'number_line') {
@@ -2165,6 +2175,22 @@ export function pickScene({ exercise, choice, age }) {
   return null
 }
 
+// A line that only makes sense in its subject: a word or a sentence on a reading page. A word
+// alone is checked against the tutor's right spelling (`answer`), never taught as written.
+function subjectRule(exercise, kind, subject, answer) {
+  const text = String(exercise ?? '').replace(/\$/g, '').replace(/\\text\{([^}]*)\}/g, '$1').trim()
+  const word = /^[A-Za-z]{2,24}$/.test(text) ? text : null
+  const right = typeof answer === 'string' ? answer.replace(/\\text\{([^}]*)\}|\$/g, '$1').trim() : ''
+  if (word && kind && WORD_KINDS.includes(kind)) {
+    const r = wordRule(word, kind)
+    return r && kind === 'spelling' ? (/^[A-Za-z]{2,24}$/.test(right) ? { ...r, word: right } : null) : r
+  }
+  if (subject !== 'reading') return null
+  if (word && /^[A-Za-z]{2,24}$/.test(right) && right.toLowerCase() !== word.toLowerCase()) return { kind: 'spelling', attempt: word, word: right }
+  if (/^[A-Za-z][A-Za-z ,'’;:!?.-]+$/.test(text) && text.split(/\s+/).length >= 3) return { kind: 'sentence', sentence: text }
+  return null
+}
+
 const COMPATIBLE = [['count', 'number_line', 'columns'], ['groups', 'area_model']]
 const compatible = (a, b) => a === b || COMPATIBLE.some((g) => g.includes(a) && g.includes(b))
 
@@ -2173,8 +2199,8 @@ const compatible = (a, b) => a === b || COMPATIBLE.some((g) => g.includes(a) && 
  * numbers from what was written and the builder checks them. If the two disagree, or the
  * classifier is unsure or unavailable, the rules decide (they only match what they can compute).
  */
-export function sceneFor({ exercise, kind, age, antiderivative, derivative }) {
-  const rule = detectScene(exercise)
+export function sceneFor({ exercise, kind, age, antiderivative, derivative, subject, answer }) {
+  const rule = detectScene(exercise) ?? subjectRule(exercise, kind, subject, answer)
   if (rule && derivative) rule.derivative = derivative
   if (!rule) return null
   const tex = rule.tex ?? null // the exercise with OCR slips fixed (S -> \\int)

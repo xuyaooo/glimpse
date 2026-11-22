@@ -1,5 +1,5 @@
 // The backend as an Express app (no listen): used by server/index.js locally and by
-// api/index.js as a Vercel Function. API reference: API.md.
+// api/index.js as a Vercel Function. API reference: docs/api.md.
 import express from 'express'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
