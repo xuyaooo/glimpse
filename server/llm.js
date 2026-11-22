@@ -104,6 +104,45 @@ function extractJson(text, schema) {
   return other
 }
 
+// GLM-OCR in the cloud: Z.ai's layout parsing (POST <base>/layout_parsing, model glm-ocr), the same
+// model as Ollama's glm-ocr locally. Its answer is the page as Markdown (md_results).
+// OCR_BASE_URL=https://api.z.ai/api/paas/v4, OCR_API_KEY=<Z.ai key>, OCR_MODEL=glm-ocr.
+export const isLayoutParsing = (cfg) => cfg.provider !== 'ollama' && /glm-ocr/i.test(cfg.model || '') && (/z\.ai|bigmodel\.cn/i.test(cfg.baseUrl || '') || process.env.OCR_LAYOUT_PARSING === '1')
+export async function layoutParse(role, base64, { signal } = {}) {
+  const cfg = roleConfig(role)
+  const started = Date.now()
+  const timeout = AbortSignal.timeout(cfg.timeoutMs)
+  const where = `${cfg.baseUrl}/layout_parsing`
+  const send = async (file) => {
+    const r = await fetch(where, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${cfg.apiKey}` },
+      body: JSON.stringify({ model: cfg.model, file }),
+      signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
+    })
+    const raw = await r.text()
+    let out = null
+    try {
+      out = JSON.parse(raw)
+    } catch {
+      // not JSON: reported below
+    }
+    return { ok: r.ok, status: r.status, out, raw }
+  }
+  try {
+    // the docs say "URL and base64": a data URL first, the bare base64 if that is refused
+    let res = await send(`data:image/jpeg;base64,${base64}`)
+    if (!res.ok && res.status >= 400 && res.status < 500) res = await send(base64)
+    if (!res.ok) throw new Error(`${role} model error ${res.status}: ${res.raw.slice(0, 300)}`)
+    const md = res.out?.md_results ?? res.out?.data?.md_results
+    if (typeof md !== 'string') throw new Error(`${role} model at ${where} gave no md_results: ${res.raw.slice(0, 160)}`)
+    return { text: md, model: cfg.model, provider: 'zai', ms: Date.now() - started }
+  } catch (err) {
+    if (timeout.aborted) throw new Error(`${role} model timed out after ${cfg.timeoutMs / 1000} s (${where})`, { cause: err })
+    throw err
+  }
+}
+
 // onText is the caller's: a mistake in it never breaks the answer
 function tell(onText, text) {
   try {

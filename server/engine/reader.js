@@ -10,7 +10,7 @@ import { decodeJpeg, resizeRgba, cropToDataUrl, toJpegBase64 } from '../images.j
 import { detectPaper } from '../vision/paperDetect.js'
 import { flatSize, warpQuad, computeHomography, applyHomography } from '../vision/paper.js'
 import { findBlocks, toGray } from '../vision/layout.js'
-import { complete, roleConfig } from '../llm.js'
+import { complete, isLayoutParsing, layoutParse, roleConfig } from '../llm.js'
 import { normalizeOcrMath } from '../ocrText.js'
 import { toPlain } from './maths.js'
 import { mkdir, writeFile } from 'node:fs/promises'
@@ -62,8 +62,25 @@ export function expectedSheet(vw, vh) {
 const OCR_PROMPT_GENERIC =
   'Transcribe everything written on this page, top to bottom, exactly as written: one line of the page per line of your output, maths in LaTeX between $...$ (fractions as \\frac{a}{b}). Keep labels like "a)" or "3.". Do not correct, simplify or solve anything, and never add an answer that is not written. Output only the transcription.'
 
+// Z.ai's GLM-OCR answers in Markdown: headings, pictures and HTML tables become plain lines
+// (a table's cells one per line), like the local GLM-OCR's text.
+export function markdownLines(md) {
+  return String(md || '')
+    .replace(/<\/(?:td|th|tr|p|div|li)>|<br\s*\/?>/gi, '\n')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
+    .split('\n')
+    .map((l) => l.replace(/^\s{0,3}#{1,6}\s+/, '').replace(/^\s*[-*]\s+(?=\S)/, '').replace(/\*\*([^*]+)\*\*/g, '$1').replace(/[ \t]{2,}/g, ' ').trim())
+    .join('\n')
+}
+
 export async function ocrImage(base64, maxTokens = 600) {
-  const { model } = roleConfig('ocr')
+  const cfg = roleConfig('ocr')
+  if (isLayoutParsing(cfg)) {
+    const out = await layoutParse('ocr', base64)
+    return { text: normalizeOcrMath(markdownLines(out.text)), model: out.model, ms: out.ms }
+  }
+  const { model } = cfg
   const prompt = /glm-ocr/i.test(model) ? 'Text Recognition:' : OCR_PROMPT_GENERIC
   const out = await complete('ocr', { messages: [{ role: 'user', content: prompt, images: [base64] }], maxTokens, temperature: 0 })
   return { text: normalizeOcrMath(out.text), model: out.model, ms: out.ms }

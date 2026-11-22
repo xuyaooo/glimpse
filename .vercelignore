@@ -13,3 +13,4 @@ node_modules
 /scripts/analyze-frames.js
 /scripts/engine-smoke.js
 .env*.local
+/models

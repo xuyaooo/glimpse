@@ -1,6 +1,7 @@
 // The backend as an Express app (no listen): used by server/index.js locally and by
 // api/index.js as a Vercel Function. API reference: docs/api.md.
 import express from 'express'
+import { roleConfig } from './llm.js'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { existsSync } from 'node:fs'
@@ -12,7 +13,7 @@ import { makeAnimation } from './animate.js'
 import { TUTOR_MODEL, TUTOR_MODELS, SEND_IMAGE, ACTIONS, MAX_TOKENS, buildMessages, thinkFor, thinkValue, profileOf } from './tutor.js'
 import { parseDataUrl, BadRequest } from './images.js'
 import { handle, newState, ENGINE_VERSION, previewScene } from './engine/session.js'
-import { historyRecord, listHistory, loadSession, saveHistory, saveSession, sessionHistory, storeKindNow } from './store.js'
+import { answerPair, createPair, getPair, historyRecord, listHistory, loadSession, saveHistory, saveSession, sessionHistory, storeKindNow } from './store.js'
 import { REVIEW_VERSION, suggestReview } from './engine/review.js'
 import { studentSummaries } from './engine/students.js'
 
@@ -27,8 +28,62 @@ const fail = (res, err) => {
   return res.status(502).json({ error: err.message })
 }
 
+// ---------- the phone as the camera ----------
+// POST /api/pair { offer } -> { code }; GET /api/pair/:code -> { offer, answer };
+// POST /api/pair/:code/answer { answer }. Only the two WebRTC messages pass here (a few KB, kept
+// 15 minutes); the video goes straight from the phone to the computer.
+const PAIR_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789' // no 0/O, 1/I: read off a screen
+const isSdp = (v) => typeof v === 'string' && v.startsWith('v=0') && v.length < 30000
+const pairCode = () => Array.from(crypto.getRandomValues(new Uint8Array(6)), (b) => PAIR_ALPHABET[b % PAIR_ALPHABET.length]).join('')
+app.post('/api/pair', async (req, res) => {
+  const offer = req.body?.offer
+  if (!isSdp(offer)) return res.status(400).json({ error: '"offer" must be an SDP offer' })
+  try {
+    const code = pairCode()
+    await createPair(code, offer)
+    res.json({ code })
+  } catch (err) {
+    fail(res, err)
+  }
+})
+app.get('/api/pair/:code', async (req, res) => {
+  try {
+    const pair = /^[A-Z0-9]{6}$/.test(req.params.code) ? await getPair(req.params.code) : null
+    if (!pair) return res.status(404).json({ error: 'This code is not valid any more. Make a new one in Settings.' })
+    res.set('Cache-Control', 'no-store').json({ offer: pair.offer, answer: pair.answer ?? null })
+  } catch (err) {
+    fail(res, err)
+  }
+})
+app.post('/api/pair/:code/answer', async (req, res) => {
+  const answer = req.body?.answer
+  if (!isSdp(answer)) return res.status(400).json({ error: '"answer" must be an SDP answer' })
+  try {
+    const ok = /^[A-Z0-9]{6}$/.test(req.params.code) && (await answerPair(req.params.code, answer))
+    if (!ok) return res.status(409).json({ error: 'This code is not valid any more, or a phone is already connected with it.' })
+    res.json({ ok: true })
+  } catch (err) {
+    fail(res, err)
+  }
+})
+
 // GET /api/health -> which models are installed and what they can do
 app.get('/api/health', async (_req, res) => {
+  // models in the cloud (OpenRouter...): ready when an address and a key are set (Ollama isn't there)
+  const ocr = roleConfig('ocr')
+  const tutor = roleConfig('tutor')
+  if (ocr.provider !== 'ollama' && tutor.provider !== 'ollama') {
+    const ready = (c) => !!(c.baseUrl && c.apiKey && c.model)
+    return res.json({
+      ok: ready(ocr) && ready(tutor),
+      ollama: false,
+      provider: 'cloud',
+      model: ocr.model,
+      hasModel: ready(ocr),
+      ocr: { model: ocr.model, ready: ready(ocr) },
+      tutor: { model: tutor.model, ready: ready(tutor), capabilities: ['vision'], sendImage: SEND_IMAGE, models: [{ name: tutor.model, ready: ready(tutor), capabilities: ['vision'] }] },
+    })
+  }
   try {
     const models = await listModels()
     const ocrReady = isInstalled(models, OCR_MODEL)

@@ -12,6 +12,7 @@ export const router = createRouter({
     { path: '/scan', name: 'scan', component: () => import('@/views/ScanView.vue'), meta: { title: 'Scan your paper' } },
     { path: '/dashboard/:id?', name: 'dashboard', component: () => import('@/views/DashboardView.vue'), props: true, meta: { title: 'Tutor view' } },
     { path: '/worksheet', name: 'worksheet', component: () => import('@/views/WorksheetView.vue'), meta: { title: 'Printable sheet' } },
+    { path: '/phone', name: 'phone', component: () => import('@/views/PhoneView.vue'), meta: { title: 'Phone camera' } },
     { path: '/:pathMatch(.*)*', redirect: '/' },
   ],
   scrollBehavior: (to) => (to.hash ? { el: to.hash, behavior: 'smooth', top: 16 } : { top: 0 }),

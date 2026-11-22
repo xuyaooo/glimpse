@@ -14,6 +14,8 @@ import { registerHooks } from 'node:module'
 
 const STUB = `data:text/javascript,${encodeURIComponent(`
 export function roleConfig(role) { return { role, provider: 'stub', model: role === 'ocr' ? 'glm-ocr' : 'stub' } }
+export const isLayoutParsing = () => false
+export async function layoutParse() { throw new Error('no cloud OCR in tests') }
 export async function complete(role, opts = {}) {
   const st = globalThis.__stub
   if (role === 'ocr') return { text: st.ocr(), model: 'glm-ocr', ms: 1 }

@@ -1,7 +1,11 @@
 // The webcam, opened by the browser (the MX Brio is a standard UVC camera). Video never
 // leaves this page: only a finished line, or one frame when an engine asks for it, is sent.
-import { onBeforeUnmount, ref } from 'vue'
+import { onBeforeUnmount, ref, watch } from 'vue'
 import type { Rect } from './geometry'
+import { phoneStream } from './phone'
+
+/** The device id of a phone connected in Settings (its video comes over WebRTC). */
+export const PHONE = 'phone'
 
 export type CameraStatus = 'idle' | 'starting' | 'live' | 'denied' | 'missing' | 'error'
 
@@ -35,13 +39,28 @@ export function useCamera() {
 
   function stop() {
     gen++
-    stream.value?.getTracks().forEach((t) => t.stop())
+    // the phone's video is the phone's: it keeps going when this page lets it go
+    if (stream.value !== phoneStream.value) stream.value?.getTracks().forEach((t) => t.stop())
     stream.value = null
   }
+  // the cameras of this computer, and the phone while it is connected
+  const withPhone = (list: { id: string; label: string }[]) => [...list.filter((d) => d.id !== PHONE), ...(phoneStream.value ? [{ id: PHONE, label: '📱 Phone camera' }] : [])]
 
   async function start(id = remembered()) {
     stop()
     if (disposed) return
+    if (id === PHONE) {
+      if (phoneStream.value) {
+        stream.value = phoneStream.value
+        deviceId.value = PHONE
+        label.value = 'Phone camera'
+        message.value = ''
+        status.value = 'live'
+        devices.value = withPhone(devices.value)
+        return
+      }
+      id = '' // the phone went away: the usual camera
+    }
     const my = gen
     if (!navigator.mediaDevices?.getUserMedia) {
       status.value = 'missing'
@@ -67,7 +86,7 @@ export function useCamera() {
       label.value = track.label || 'Camera'
       const all = await navigator.mediaDevices.enumerateDevices()
       if (my !== gen) return
-      devices.value = all.filter((d) => d.kind === 'videoinput').map((d, i) => ({ id: d.deviceId, label: d.label || `Camera ${i + 1}` }))
+      devices.value = withPhone(all.filter((d) => d.kind === 'videoinput').map((d, i) => ({ id: d.deviceId, label: d.label || `Camera ${i + 1}` })))
       status.value = 'live'
       // First time here: prefer the Logitech Brio if it's plugged in.
       if (!id) {
@@ -97,6 +116,14 @@ export function useCamera() {
       }
     }
   }
+
+  // a phone connects (Settings): it becomes the camera; it goes: back to the usual one
+  watch(phoneStream, (s) => {
+    if (disposed) return
+    if (s) void start(PHONE)
+    else if (deviceId.value === PHONE) void start('')
+    else devices.value = withPhone(devices.value)
+  })
 
   onBeforeUnmount(() => {
     disposed = true

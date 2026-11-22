@@ -28,6 +28,14 @@ const SCHEMA = [
    )`,
   `create index if not exists glimpse_history_student on glimpse_history (student_id, at desc)`,
   `create index if not exists glimpse_history_session on glimpse_history (session_id, at)`,
+  // The phone as the camera: the computer's WebRTC offer and the phone's answer, by a short code
+  // (kept 15 minutes). In the database so every Vercel function sees them.
+  `create table if not exists glimpse_pairs (
+     code text primary key,
+     offer text not null,
+     answer text,
+     at timestamptz not null default now()
+   )`,
 ]
 
 let ready = null
@@ -84,6 +92,24 @@ const toJson = (v) =>
     return x
   })
 const textParam = (v) => (typeof v === 'string' ? cleanText(v) : v)
+
+const PAIR_MINUTES = 15
+export async function createPair(code, offer) {
+  const { query } = await db()
+  await query(`delete from glimpse_pairs where at < now() - interval '${PAIR_MINUTES} minutes'`)
+  await query('insert into glimpse_pairs (code, offer) values ($1, $2)', [code, textParam(offer)])
+}
+export async function getPair(code) {
+  const { query } = await db()
+  const rows = await query(`select offer, answer from glimpse_pairs where code = $1 and at > now() - interval '${PAIR_MINUTES} minutes'`, [code])
+  return rows[0] ?? null
+}
+/** The phone's answer, once (a second answer for the same code is refused). */
+export async function answerPair(code, answer) {
+  const { query } = await db()
+  const rows = await query(`update glimpse_pairs set answer = $2 where code = $1 and answer is null and at > now() - interval '${PAIR_MINUTES} minutes' returning code`, [code, textParam(answer)])
+  return rows.length > 0
+}
 
 export async function loadSession(id) {
   const { query } = await db()

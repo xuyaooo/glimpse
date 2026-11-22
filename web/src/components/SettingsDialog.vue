@@ -3,6 +3,7 @@
 // on or off, and listening for a question after pointing.
 import { computed, onBeforeUnmount, onMounted, watch } from 'vue'
 import FocusTrap from './FocusTrap.vue'
+import PhoneCameraCard from './PhoneCameraCard.vue'
 import { NATURAL_VOICES, settings } from '@/lib/settings'
 import { preloadVoice, speak, stopSpeaking, voiceStatus } from '@/lib/speech'
 import { listenStatus, preloadListener } from '@/lib/listen'
@@ -134,6 +135,8 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey, true))
             <span class="absolute left-0.5 top-0.5 size-6 rounded-full bg-white shadow transition-transform" :class="settings.listenAfterPointing ? 'translate-x-5' : ''" />
           </span>
         </label>
+        <!-- a phone as the camera -->
+        <PhoneCameraCard />
       </section>
       </FocusTrap>
     </div>
