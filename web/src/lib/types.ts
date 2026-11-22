@@ -100,6 +100,8 @@ export interface SessionReview {
 /** One exercise in the whole-sheet report. */
 export interface SheetItem {
   n: number
+  /** Its label on the sheet ("a", "3"), when it has one. */
+  label?: string | null
   partId: number
   latex: string
   verdict: 'right' | 'wrong' | 'unfinished' | 'unsure'

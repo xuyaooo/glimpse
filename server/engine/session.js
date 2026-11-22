@@ -2,9 +2,9 @@
 //   state' = await handle(state, clientEvent, emit)
 // State is plain JSON so it can live in a database between serverless calls; `emit` sends
 // engine events back (streamed over HTTP, or a WebSocket).
-import { F, toPlain, parseSum, plainToLatex, checkSum, checkEquation, diagnose, BUGS, reduce, fstr, sumLatex, evaluate, lcm } from './maths.js'
+import { F, toPlain, parseSum, plainToLatex, checkSum, checkEquation, diagnose, BUGS, reduce, fstr, sumLatex, evaluate, lcm, arithmeticNote } from './maths.js'
 import { explainWrongSum, chooseStyle, similarExercises, hint, styleNames, exerciseId } from './teach.js'
-import { readFrame, stripMath } from './reader.js'
+import { readFrame, stripMath, LABEL } from './reader.js'
 import { decodeJpeg, drawRing, resizeRgba, toJpegBase64 } from '../images.js'
 import { complete } from '../llm.js'
 import { sceneFor, texToPlain, compile, toExpr } from './scenes.js'
@@ -170,7 +170,7 @@ function judge(s, part, emit) {
   } else if (eq === false) {
     s.streak = 0
     if (fractionAttempt(plain)) settleTeaching(false)
-    putPart(s, { ...part, verdict: 'wrong', note: 'the two sides are not equal' }, emit)
+    putPart(s, { ...part, verdict: 'wrong', note: arithmeticNote(plain)?.note ?? 'the two sides are not equal' }, emit)
     h = say(s, 'wrong_generic')
   } else {
     putPart(s, { ...part, verdict: 'unsure', note: "couldn't check this line" }, emit)
@@ -579,11 +579,16 @@ Write maths in the feedback as plain text that can be read aloud (e.g. x², 3/4)
       verdict = v === 'wrong' ? 'wrong' : 'correct'
       note = verdict === 'wrong' ? diagnose(sum.a, sum.b, sum.ans)[0]?.label || 'not the right total' : undefined
     } else if (plain && checkEquation(plain) !== null) {
+      const modelNote = verdict === 'wrong' && note
       verdict = checkEquation(plain) ? 'correct' : 'wrong'
-      note = verdict === 'wrong' ? 'the two sides are not equal' : undefined
+      // computed on a sum of two whole numbers: the slip that explains the exact answer (a carry
+      // forgotten...) or a way to check it backwards, never the right answer (the model's guess
+      // was seen live blaming a "carry" in a division); else the model's note
+      const a = verdict === 'wrong' ? arithmeticNote(plain) : null
+      note = verdict === 'wrong' ? a?.note || modelNote || 'the two sides are not equal' : undefined
     }
-    // nothing after the last "=" (2 + 4 + ... + 100 =): no answer yet, so it can't be right
-    if (verdict === 'correct' && /=\s*$/.test(stripMath(line).replace(/\\[,;!quad ]+$/, '').trim())) {
+    // nothing after the last "=" (2 + 4 + ... + 100 =): no answer yet, so it isn't right or wrong
+    if (/=\s*$/.test(stripMath(line).replace(/\\[,;!quad ]+$/, '').trim())) {
       verdict = 'unsure'
       note = 'not finished yet'
     }
@@ -825,6 +830,7 @@ const ageNote = (s) => (s.age ? ` The student is ${s.age} years old: explain at 
 // Solves the exercise and sends {type: 'steps'}: first the animation (as soon as the decision
 // model has picked it), then the tutor's worked solution. Once per exercise.
 async function sendSteps(s, exercise, emit, { reason = 'line', image } = {}) {
+  exercise = String(exercise ?? '').trim().replace(LABEL, '') // "b) 47 + 38 = 75": the label is not part of it
   const key = mathKey(exercise)
   if (!key || s.stepsFor === key) return
   s.stepsFor = key

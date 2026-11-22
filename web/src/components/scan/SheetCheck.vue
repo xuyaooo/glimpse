@@ -7,6 +7,7 @@ import FocusTrap from '../FocusTrap.vue'
 import MathTex from '../MathTex.vue'
 import Mascot from '../Mascot.vue'
 import { titleTex } from '@/lib/latex'
+import { itemName, youNote } from '@/lib/sheet'
 import type { SheetItem, SheetReport } from '@/lib/types'
 
 const props = defineProps<{ prompt: boolean; checking: boolean; report: SheetReport | null; open: boolean }>()
@@ -82,14 +83,14 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey, true))
 
               <ol v-if="report.items.length" class="m-0 flex min-h-0 list-none flex-col gap-2 overflow-y-auto p-0 pr-1">
                 <li v-for="(it, i) in report.items" :key="it.partId" class="flex items-start gap-3 rounded-2xl border-2 p-3" :class="it.verdict === 'right' ? 'border-[#cdeedb]' : it.verdict === 'wrong' ? 'border-[#f6cdd1]' : 'border-line'" :style="{ animation: `rise 400ms ${0.1 + i * 0.05}s both` }">
-                  <span class="flex size-8 shrink-0 items-center justify-center rounded-full bg-line-2 text-[13px] font-black text-ink-2">{{ it.n }}</span>
+                  <span class="flex h-8 min-w-8 shrink-0 items-center justify-center rounded-full bg-line-2 px-1.5 text-[13px] font-black text-ink-2">{{ itemName(it) }}</span>
                   <div class="min-w-0 flex-1">
                     <MathTex :latex="titleTex(it.latex)" class="block overflow-x-auto text-[20px]" />
-                    <p v-if="it.note" class="mt-1 text-[13px] font-semibold text-ink-2">{{ it.note }}</p>
+                    <p v-if="it.note" class="mt-1 text-[13px] font-semibold text-ink-2">{{ youNote(it.note) }}</p>
                   </div>
                   <div class="flex shrink-0 flex-col items-end gap-1.5">
                     <span class="rounded-full px-2.5 py-0.5 text-[12px] font-black" :class="BADGE[it.verdict].cls"><span aria-hidden="true">{{ BADGE[it.verdict].icon }}</span> {{ BADGE[it.verdict].label }}</span>
-                    <button v-if="it.verdict === 'wrong' || it.verdict === 'unfinished'" type="button" class="rounded-lg bg-tangerine px-2.5 py-1 text-[12px] font-black text-white shadow hover:scale-105" @click="emit('explain', it.partId)">Show me how</button>
+                    <button v-if="it.verdict === 'wrong' || it.verdict === 'unfinished'" type="button" class="rounded-lg bg-tangerine px-2.5 py-1 text-[12px] font-black text-white shadow hover:scale-105" @click="emit('explain', it.partId)">{{ it.verdict === 'wrong' ? 'Help me fix it' : 'Help me finish' }}</button>
                   </div>
                 </li>
               </ol>

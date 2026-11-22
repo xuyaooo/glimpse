@@ -4,6 +4,17 @@
 import type { SheetItem, SheetReport } from './types'
 export type { SheetItem, SheetReport }
 
+/** How an exercise is called: its label on the sheet ("b)"), else its place ("#2"). */
+export const itemName = (it: Pick<SheetItem, 'n' | 'label'>) => (it.label ? `${it.label})` : `#${it.n}`)
+
+/** A note written to follow "you" ("forgot to carry the ten") as a sentence: "You forgot to carry the ten." */
+export function youNote(note: string) {
+  const n = note.trim().replace(/[.]+$/, '')
+  if (!n) return ''
+  const said = /^(?:you|the|this|that|it|its|not|no|couldn|can|a|an|check)/i.test(n) ? n : `you ${n}`
+  return `${said.charAt(0).toUpperCase()}${said.slice(1)}.`
+}
+
 /** The report for the demo (no engine): the lines on screen, counted the same way as the engine. */
 export function localSheetReport(parts: { id: number; latex: string; verdict: string; note?: string }[], name?: string): SheetReport {
   const items: SheetItem[] = parts
@@ -27,6 +38,6 @@ export function localSheetReport(parts: { id: number; latex: string; verdict: st
     ? "I couldn't find any exercise on this sheet."
     : right === total
       ? `${total === 1 ? 'Your exercise is' : `All ${total} exercises are`} right. Brilliant${name ? `, ${name}` : ''}!`
-      : `${bits.join(', ')}.${first ? ` Start with number ${first.n}.` : ''}`
+      : `${bits.join(', ')}.${first ? ` Start with ${first.label && /[a-z]/.test(first.label) ? first.label : `number ${first.label ?? first.n}`}.` : ''}`
   return { total, right, wrong, unfinished, unsure, items, message, firstToFix: first?.partId ?? null, at: Date.now() }
 }

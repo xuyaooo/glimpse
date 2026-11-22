@@ -36,7 +36,8 @@ Maths travels as LaTeX: `\frac{3}{4}+\frac{1}{2}=\frac{4}{6}`. Fractions are nev
 | `question` | `question: {text, lang, final, pointedAt?: {partId, token}}` | live transcript and pointed target |
 | `answer` | `answer: {text, lang, translation?, visual?}` | the answer to a question |
 | `page` | `page: {lines: [[{t: 'text' or 'math', v}]], ms, at}` | the whole paper as the OCR model read it ("The whole page" card) |
-| `steps` | `steps: {about, title, items: [{say, math}], result, lang, at}` | the whole solution of the newest unfinished or wrong line, or of what was pointed at, worked out by the tutor ("Step by step" card, one step at a time) |
+| `steps` | `steps: {about, title, hints, items: [{say, math}], result, lang, at}` | the whole solution of the newest unfinished or wrong line, or of what was pointed at, worked out by the tutor. `hints`: up to 3, never the answer (`safeHints` drops any that gives it away). The "Let's solve it" card shows the hints first, then the steps one at a time; the answer stays hidden until asked for |
+| `sheet` | `sheet: {total, right, wrong, unfinished, unsure, items: [{n, label, partId, latex, verdict, note}], message, firstToFix, at}` or `sheet: null, error: true` | the answer to *Check the whole sheet* (`check_sheet`): every exercise on the page, by its label on the sheet (`label`: "a", "3", or null), its verdict (`right` / `wrong` / `unfinished` / `unsure`) and a note about its mistake (never the right answer). The **Whole sheet** tab of the right panel |
 
 `style` is one of `pictures`, `bars`, `steps`, `number_line`. `name` in a misconception is phrased to follow "you", e.g. `added the tops and the bottoms`.
 

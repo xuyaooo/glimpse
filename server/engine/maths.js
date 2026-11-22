@@ -273,3 +273,40 @@ export function diagnose(a, b, ans) {
     return p.d !== 0 && sameForm(p, ans) && !sameValue(p, addExact(a, b))
   })
 }
+
+// ---------- what went wrong in a sum on whole numbers ----------
+// "47 + 38 = 75" -> "forgot to carry the ten". The slip when one explains the child's exact answer
+// (specific: true), or else a way to check it backwards ("12 − 5 = 8": "8 + 5 should make 12"),
+// which helps find the mistake without giving the answer. null: not a wrong a ○ b = c on whole numbers.
+export function arithmeticNote(plain) {
+  const m = String(plain ?? '').replace(/\s+/g, '').match(/^(\d{1,6})([+\-*x×:÷/])(\d{1,6})=(\d{1,7})$/)
+  if (!m) return null
+  const [a, b, r] = [Number(m[1]), Number(m[3]), Number(m[4])]
+  const op = m[2] === '+' ? '+' : m[2] === '-' ? '-' : /[*x×]/.test(m[2]) ? '*' : '/'
+  const right = op === '+' ? a + b : op === '-' ? a - b : op === '*' ? a * b : b && a % b === 0 ? a / b : null
+  if (right === null || right === r) return null
+  const flip = (n) => Number(String(n).split('').reverse().join(''))
+  const say = (note, specific = true) => ({ note, specific })
+  if (r >= 10 && right >= 10 && flip(r) === right) return say('swapped the two digits of the answer round')
+  if (op === '+') {
+    if (r === a - b || r === b - a) return say('took away instead of adding')
+    if (right - r === 10 && (a % 10) + (b % 10) >= 10) return say('forgot to carry the ten')
+    if (r - right === 10) return say('had one ten too many: add the tens again')
+    if (Math.abs(r - right) === 1) return say('were 1 out: count on again carefully')
+    return say(`it doesn't check out: ${r} − ${b} should give back ${a}`, false)
+  }
+  if (op === '-') {
+    if (r === a + b) return say('added instead of taking away')
+    if (a % 10 < b % 10 && r === (b % 10) - (a % 10) + 10 * (Math.floor(a / 10) - Math.floor(b / 10))) return say('took the smaller digit from the bigger one in the ones')
+    if (a >= 10 && r - right === 10 && a % 10 < b % 10) return say('forgot to exchange a ten (borrow)')
+    if (Math.abs(r - right) === 1) return say('were 1 out: count back again carefully')
+    return say(`it doesn't check out: ${r} + ${b} should make ${a}`, false)
+  }
+  if (op === '*') {
+    if (r === a + b) return say('added instead of multiplying')
+    if (Math.abs(r - right) === a || Math.abs(r - right) === b) return say(`were one group out: ${b} lots of ${a}, count the groups again`)
+    return say(`it doesn't check out: ${b} lots of ${a} don't make ${r}`, false)
+  }
+  if (r === a - b) return say('took away instead of dividing')
+  return say(`it doesn't check out: ${r} × ${b} should make ${a}`, false)
+}

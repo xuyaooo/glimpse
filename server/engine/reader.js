@@ -190,8 +190,110 @@ export function cleanOcrLines(text) {
     lines = all.filter((l) => count.get(l) < 4)
   }
   const out = []
-  for (const l of lines) if (out[out.length - 1] !== l) out.push(l)
+  for (const l of lines.map(closeMath)) if (out[out.length - 1] !== l) out.push(l)
   return out
+}
+// A maths "$" the OCR opened and never closed (seen live at the end of the page: "f) $15 - 6 =")
+// is closed at the end of the line, when what follows it is maths (not "it costs $5 each").
+function closeMath(line) {
+  const singles = [...line.matchAll(/(?<![\\$])\$(?!\$)/g)]
+  if (singles.length % 2 === 0) return line
+  const tail = line.slice(singles.at(-1).index + 1)
+  return /\d|\\[a-z]/.test(tail) && !/[a-z]{3,}/i.test(tail.replace(/\\[a-z]+/gi, '')) ? `${line.trimEnd()}$` : line
+}
+
+// ---------- sums written in columns ----------
+//
+// A sum worked in columns (34, then "+ 25" under it, a bar, 59 below) comes from GLM-OCR in
+// pieces: on lines of their own ("34" / "+ 25" / "59"), as a fraction ("34" / "\frac{+25}{59}",
+// the bar read as a fraction bar) or as an array. Each becomes one exercise, "34 + 25 = 59" (or
+// "34 + 25 =" while it has no answer), with its label ("a)") kept, so a sheet mixing column sums
+// and sums on a line is checked exercise by exercise.
+const COL_NUM = /^\d+(?:[.,]\d+)?$/
+const COL_OP = String.raw`\+|-|−|–|×|x|X|\*|·|\\times|\\cdot`
+const OP_LINE = new RegExp(String.raw`^(${COL_OP})\s*(\d+(?:[.,]\d+)?)$`)
+const FRAC_OP = new RegExp(String.raw`^\\frac\{\s*(${COL_OP})\s*(\d+(?:[.,]\d+)?)\s*\}\{\s*(\d+(?:[.,]\d+)?)?\s*\}$`)
+const BAR = /^(?:[-_—–=]{2,}|\\hline|\\rule\{[^}]*\}\{[^}]*\})$/
+/** An exercise's label as the sheet writes it: "a)", "(b)", "3.", "4)", "c:". */
+export const LABEL = /^\(?(?:[a-z]|\d{1,2})[).:]\s+|^\(?(?:[a-z]|\d{1,2})\)/i
+const LABEL_ONLY = /^\(?(?:[a-z]|\d{1,2})[).:]$/i
+// a line without its maths markers ($, $$, \( \)) or spaces at the ends
+const bare = (l) => String(l).trim().replace(/^\$+|\$+$/g, '').replace(/^\\\(|\\\)$/g, '').trim()
+const opTex = (o) => (o === '+' ? '+' : /^[-−–]$/.test(o) ? '-' : '\\times')
+// rows of an array/aligned block ("\begin{array}{r} 34 \\ +25 \\ \hline 59 \end{array}") as lines
+function arrayRows(line) {
+  const m = bare(line).match(/^\\begin\{(array|aligned|matrix)\}(?:\{[^}]*\})?([\s\S]*)\\end\{\1\}$/)
+  if (!m) return [line]
+  const rows = m[2].split(/\\\\|\\hline/).map((r) => r.replace(/&/g, '').trim()).filter(Boolean)
+  return rows.length >= 2 && rows.every((r) => COL_NUM.test(r) || OP_LINE.test(r)) ? rows : [line]
+}
+/** The OCR lines, with every sum written in columns joined into one line. */
+export function joinColumnSums(lines) {
+  const rows = lines.flatMap(arrayRows)
+  const opAt = (k) => k < rows.length && (OP_LINE.test(bare(rows[k])) || FRAC_OP.test(bare(rows[k])))
+  // a number followed by an operator line starts a column sum
+  const startsSum = (k) => k < rows.length && COL_NUM.test(bare(rows[k])) && opAt(k + 1)
+  const out = []
+  for (let i = 0; i < rows.length; i++) {
+    let label = ''
+    let at = i
+    // a label on a line of its own ("a)") goes with the sum under it
+    if (LABEL_ONLY.test(bare(rows[i])) && i + 1 < rows.length && COL_NUM.test(bare(rows[i + 1])) && opAt(i + 2)) {
+      label = `${bare(rows[i])} `
+      at = i + 1
+    }
+    let first = rows[at].trim()
+    const lm = !label && first.match(LABEL)
+    if (lm) {
+      label = lm[0].endsWith(' ') ? lm[0] : `${lm[0]} `
+      first = first.slice(lm[0].length)
+    }
+    const top = bare(first)
+    if (!COL_NUM.test(top) || !opAt(at + 1)) {
+      out.push(rows[i])
+      continue
+    }
+    const terms = [top]
+    let op = null
+    let result = null
+    let j = at + 1
+    let closed = false
+    while (j < rows.length) {
+      const b = bare(rows[j])
+      const fm = b.match(FRAC_OP)
+      if (fm && (!op || opTex(fm[1]) === op)) {
+        op = opTex(fm[1])
+        terms.push(fm[2])
+        result = fm[3] ?? null
+        closed = true
+        j++
+        break
+      }
+      const om = b.match(OP_LINE)
+      if (!om || (op && opTex(om[1]) !== op)) break
+      op = opTex(om[1])
+      terms.push(om[2])
+      j++
+    }
+    if (!closed) {
+      if (j < rows.length && BAR.test(bare(rows[j]))) j++
+      // the answer under the bar (not the top number of the next sum)
+      if (j < rows.length && COL_NUM.test(bare(rows[j])) && !startsSum(j)) result = bare(rows[j++])
+      // long multiplication: the partial products, then the total (the last number)
+      while (op === '\\times' && result != null && j < rows.length && (COL_NUM.test(bare(rows[j])) || BAR.test(bare(rows[j]))) && !startsSum(j)) {
+        if (COL_NUM.test(bare(rows[j]))) result = bare(rows[j])
+        j++
+      }
+    }
+    out.push(`${label}$${terms.join(` ${op} `)} =${result != null ? ` ${result}` : ''}$`)
+    i = j - 1
+  }
+  return out
+}
+/** A column sum the OCR squashed into a division ("a) 34 ÷ 59": the second number and the bar lost). */
+export function squashedColumn(line) {
+  const t = String(line).trim().replace(LABEL, '')
+  return /^\$?\s*\d+\s*(?:\\div|÷)\s*\d+\s*\$?$/.test(t) || /^\$?\s*\\frac\{\s*[+\-−×]/.test(t)
 }
 
 // frame: JPEG bytes. readKeys: lineKey() of the lines already read. prevQuad: last paper outline.
@@ -278,7 +380,24 @@ export { toJpegBase64 }
 export async function readFrame(frame) {
   const b64 = Buffer.from(frame).toString('base64')
   const ocr = await ocrImage(b64, 800)
-  const lines = cleanOcrLines(ocr.text)
-  await saveDebug(frame, { ocr: ocr.text, ocrMs: ocr.ms, lines })
-  return { image: b64, text: lines.join('\n'), lines, ocrMs: ocr.ms, page: { lines: lines.map(toSegments), ms: ocr.ms } }
+  let lines = joinColumnSums(cleanOcrLines(ocr.text))
+  let ms = ocr.ms
+  let reread = null
+  // A column sum squashed into "34 ÷ 59": the whole frame is read once more, smaller (still the
+  // whole frame: seen on test sheets, the smaller read keeps each number of a column on its line).
+  const squashed = lines.filter(squashedColumn).length
+  if (squashed) {
+    try {
+      const img = decodeJpeg(frame)
+      const again = await ocrImage(toJpegBase64(resizeRgba(img, Math.round(Math.max(img.width, img.height) * 0.6)), 90), 800)
+      const lines2 = joinColumnSums(cleanOcrLines(again.text))
+      ms += again.ms
+      reread = again.text
+      if (lines2.filter(squashedColumn).length < squashed && lines2.length >= lines.length) lines = lines2
+    } catch {
+      // keep the first read
+    }
+  }
+  await saveDebug(frame, { ocr: ocr.text, ocrMs: ocr.ms, ...(reread != null ? { reread } : {}), lines })
+  return { image: b64, text: lines.join('\n'), lines, ocrMs: ms, page: { lines: lines.map(toSegments), ms } }
 }

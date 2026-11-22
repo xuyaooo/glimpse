@@ -105,7 +105,7 @@ test('a wrong line checked exactly gets a computed note, not the model guess', a
   resetStub()
   const s = session('note')
   await read(s, ['$12 + 15 = 37$'], { verdicts: ['wrong'], notes: ['added the tops and the bottoms'] })
-  assert.equal(s.parts[0].note, 'the two sides are not equal')
+  assert.equal(s.parts[0].note, 'had one ten too many: add the tens again') // computed: 27, not 37
 })
 
 test('a whole number is written as one: "2/2 can also be written 1", not 1/1', async () => {

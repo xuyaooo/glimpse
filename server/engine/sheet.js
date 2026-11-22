@@ -12,14 +12,23 @@ export function sheetVerdict(part) {
   return 'unsure'
 }
 
+// "\text{a) } 34 + 25 = 59" -> "34 + 25 = 59" (the label is shown beside it)
+const unlabelled = (latex) => String(latex).replace(/^\\text\{\s*\(?(?:[a-z]|\d{1,2})[).:]?\s*\}\s*/i, '') || String(latex)
+
+/** The exercise's own label on the sheet ("a) 34 + 25 = 59" -> "a", "(3) ..." -> "3"), or null. */
+export function sheetLabel(raw) {
+  const m = String(raw ?? '').trim().match(/^\(?([a-z]|\d{1,2})[).:]\s+|^\(?([a-z]|\d{1,2})\)/i)
+  return m ? (m[1] ?? m[2]).toLowerCase() : null
+}
+
 /**
  * The report for the parts of one sheet, top to bottom:
- * { total, right, wrong, unfinished, unsure, items: [{ n, partId, latex, verdict, note }], message, firstToFix, at }.
+ * { total, right, wrong, unfinished, unsure, items: [{ n, label, partId, latex, verdict, note }], message, firstToFix, at }.
  */
 export function sheetReport(parts, { name } = {}) {
   const items = parts
     .filter((p) => p && p.verdict !== 'reading' && p.latex)
-    .map((p, i) => ({ n: i + 1, partId: p.id, latex: p.latex, verdict: sheetVerdict(p), note: p.note && p.note !== 'not finished yet' ? SHORT(p.note, 120) : null }))
+    .map((p, i) => ({ n: i + 1, label: sheetLabel(p.raw), partId: p.id, latex: unlabelled(p.latex), verdict: sheetVerdict(p), note: p.note && p.note !== 'not finished yet' ? SHORT(p.note, 120) : null }))
   const count = (v) => items.filter((x) => x.verdict === v).length
   const [right, wrong, unfinished, unsure] = ['right', 'wrong', 'unfinished', 'unsure'].map(count)
   const total = items.length
@@ -33,7 +42,9 @@ export function sheetReport(parts, { name } = {}) {
     if (wrong) parts.push(`${wrong} to fix`)
     if (unfinished) parts.push(`${plural(unfinished, 'exercise')} not finished`)
     if (unsure) parts.push(`${unsure} I couldn't check`)
-    message = `${parts.join(', ')}.${first ? ` Start with number ${first.n}.` : ''}`
+    // by the sheet's own label when it has one ("Start with b."), else by its place
+    const which = first && (first.label && /[a-z]/.test(first.label) ? first.label : `number ${first.label ?? first.n}`)
+    message = `${parts.join(', ')}.${first ? ` Start with ${which}.` : ''}`
   }
   return { total, right, wrong, unfinished, unsure, items, message, firstToFix: first?.partId ?? null, at: Date.now() }
 }

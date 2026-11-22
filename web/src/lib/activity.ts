@@ -2,6 +2,7 @@
 import { reactive, watch } from 'vue'
 import { state } from './engine'
 import { STYLE_LABEL } from './mock'
+import { youNote } from './sheet'
 import type { TeachStyle } from './types'
 
 export type ActivityKind = 'camera' | 'read' | 'right' | 'wrong' | 'unsure' | 'teach' | 'practice' | 'ask' | 'answer' | 'learned'
@@ -47,7 +48,7 @@ export function startActivityLog() {
         verdicts.set(p.id, p.verdict)
         if (p.verdict === 'reading') log('read', `Pencil lifted. Reading line ${p.id}.`, 'Only this line is cropped from the picture and read, on this laptop.')
         else if (p.verdict === 'correct') log('right', `Line ${p.id} is right.`, `Read ${Math.round(p.confidence * 100)}% sure, then checked with exact arithmetic.`)
-        else if (p.verdict === 'wrong') log('wrong', `Line ${p.id} isn't right yet.`, p.note ? `The answer is exactly what you get if you ${p.note.replace(/^added/, 'add').replace(/^changed/, 'change')}.` : 'Checked with exact arithmetic.')
+        else if (p.verdict === 'wrong') log('wrong', `Line ${p.id} isn't right yet.`, p.note ? youNote(p.note) : 'Checked with exact arithmetic.')
         else log('unsure', `Line ${p.id} needs fixing first.`, p.note)
       }
     },

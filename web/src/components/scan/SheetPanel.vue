@@ -6,6 +6,7 @@
 import { computed, ref, watch } from 'vue'
 import MathTex from '../MathTex.vue'
 import { titleTex } from '@/lib/latex'
+import { itemName, youNote } from '@/lib/sheet'
 import { speak } from '@/lib/speech'
 import type { SheetItem, SheetReport, WrittenPart } from '@/lib/types'
 
@@ -123,16 +124,16 @@ const cheer = computed(() => (props.report && props.report.total && props.report
           </span>
           <div class="min-w-0 flex-1">
             <div class="flex flex-wrap items-center gap-2">
-              <span class="text-[12px] font-black text-ink-3">#{{ it.n }}</span>
+              <span class="rounded-md bg-line-2 px-1.5 py-0.5 text-[12px] font-black text-ink-2">{{ itemName(it) }}</span>
               <span class="rounded-full px-2 py-0.5 text-[11px] font-black" :class="VERDICT[it.verdict].cls">{{ VERDICT[it.verdict].label }}</span>
             </div>
             <MathTex :latex="titleTex(it.latex)" class="mt-0.5 block overflow-x-auto text-[20px]" />
-            <p v-if="it.note" class="mt-1 text-[13px] font-semibold leading-snug text-ink-2">{{ it.note.charAt(0).toUpperCase() + it.note.slice(1) }}</p>
+            <p v-if="it.note" class="mt-1 flex items-start gap-1.5 text-[13px] font-semibold leading-snug text-ink-2"><span v-if="it.verdict === 'wrong'" aria-hidden="true">💡</span>{{ youNote(it.note) }}</p>
           </div>
           <div class="flex shrink-0 flex-col items-end gap-1.5">
             <button v-if="it.verdict === 'wrong' || it.verdict === 'unfinished'" type="button" class="inline-flex items-center gap-1 rounded-lg bg-tangerine px-2.5 py-1.5 text-[12px] font-black text-white shadow transition hover:scale-105" @click="emit('explain', it.partId)">
               <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>
-              Show me how
+              {{ it.verdict === 'wrong' ? 'Help me fix it' : 'Help me finish' }}
             </button>
             <button type="button" class="rounded-lg px-2 py-1 text-[12px] font-black text-lagoon-deep hover:bg-lagoon-mist" @click="emit('select', it.partId)">See it</button>
           </div>
