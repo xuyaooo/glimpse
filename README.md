@@ -41,19 +41,23 @@ decide/laya_service.py   Laya: which animation fits, ~50 ms (:8091)
 
 ## Run it locally
 
-Needs Node 20+, and either [Ollama](https://ollama.com) (models on your computer) or an API key for a cloud provider such as OpenRouter. Python 3.10+ for Laya (optional).
+One script sets everything up (Node packages, the AI models, Laya) and can be run again any time:
 
 ```bash
-ollama pull glm-ocr && ollama pull qwen3.5   # once: the OCR and tutor models
-npm run setup                                # once: installs the engine and the app
-npm run setup:decide                         # once: the Laya decision model (optional)
-npm run dev                                  # engine :3001 + app http://localhost:5173 + Laya :8091
+./setup.sh                # asks where the models should run
+./setup.sh --local        # on this computer with Ollama (glm-ocr + qwen3.5): free and private, ~9 GB once
+./setup.sh --openrouter   # in the cloud with OpenRouter: no download, needs a key (https://openrouter.ai/keys)
+./setup.sh --hybrid       # reading on this computer (glm-ocr), the tutor in the cloud
+npm run dev               # engine :3001 + app http://localhost:5173 + Laya :8091
 ```
 
+- Needs Node 20+. Ollama for `--local`/`--hybrid` (the script offers to install it with Homebrew on a Mac). Python 3.10+ for Laya (optional: `--no-laya` skips it, and the engine's rules pick the animations).
+- With OpenRouter the defaults are `qwen/qwen3.8-flash` to read the paper and `anthropic/claude-haiku-5.5` for the tutor. Pick others by their OpenRouter id: `OCR_MODEL=google/gemini-3.8-flash TUTOR_MODEL=openai/gpt-6-luna ./setup.sh --openrouter`.
+- The key and the model choice go in `.env.local` (never committed); `./setup.sh --local` switches back without forgetting the key. Other settings (database, timeouts, other providers such as Groq): see `.env.example`.
+- By hand instead: `ollama pull glm-ocr && ollama pull qwen3.5`, `npm run setup`, `npm run setup:decide`, `npm run dev`.
 - The app finds the engine by itself (`/api/engine/hello`). Without one it runs a scripted demo (`?demo`).
-- Settings (cloud models, database...) go in `.env.local` in this folder (copy `.env.example`). The engine reads it when it starts; variables set in the shell win.
 - The engine listens on this computer only (`127.0.0.1:3001`). `HOST=0.0.0.0` opens it to the network, but read "No login" first.
-- The first visit downloads the natural voice (Kokoro) and Whisper into the browser (once, then cached).
+- The first visit downloads the natural voice (Kokoro) and Whisper into the browser (once, then cached). On Windows, run the script in WSL or Git Bash.
 
 ## Test it
 
