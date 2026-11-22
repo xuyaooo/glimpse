@@ -26,10 +26,14 @@ const tex = computed(() => titleTex(props.latex))
 const open = ref(false)
 const box = ref<HTMLElement | null>(null)
 const clipped = ref(false)
-// only when it really goes past its lines does "Show all" appear
+// only when it really goes past its lines does "Show all" appear: a fraction or an integral
+// stands a few pixels above and below its line, so only a hidden line (half of one or more) counts
 function measure() {
   const el = box.value
-  clipped.value = !!el && !!props.lines && !open.value && el.scrollHeight > el.clientHeight + 2
+  if (!el || !props.lines || open.value) return void (clipped.value = false)
+  const style = getComputedStyle(el)
+  const line = parseFloat(style.lineHeight) || parseFloat(style.fontSize) * 1.4 || 20
+  clipped.value = el.scrollHeight - el.clientHeight > line / 2
 }
 let ro: ResizeObserver | undefined
 onMounted(() => {
