@@ -579,6 +579,11 @@ Write maths in the feedback as plain text that can be read aloud (e.g. x², 3/4)
       verdict = checkEquation(plain) ? 'correct' : 'wrong'
       note = verdict === 'wrong' ? 'the two sides are not equal' : undefined
     }
+    // nothing after the last "=" (2 + 4 + ... + 100 =): no answer yet, so it can't be right
+    if (verdict === 'correct' && /=\s*$/.test(stripMath(line).replace(/\\[,;!quad ]+$/, '').trim())) {
+      verdict = 'unsure'
+      note = 'not finished yet'
+    }
     const id = prev ? prev.id : s.nextPartId++
     if (!prev) order.push(id)
     const exId = sum && exerciseId(sum.a, sum.b)
@@ -1258,6 +1263,47 @@ function remember(s, { kind, ref, data, at }) {
   ;(s.history ||= []).push({ kind, ref: `${s.id}:${ref}`, at: Number.isFinite(at) ? at : Date.now(), data: { ...data, subject: s.subject || 'maths' } })
 }
 
+// The line of the transcription (or two or three consecutive lines together) closest to `text`,
+// by shared letter pairs (Dice coefficient on the text without spaces, $ and numbering); null if
+// none is close enough.
+export function closestLine(text, lines) {
+  // compared without spaces, $, numbering, dots (the model may drop a "..."), with one times sign
+  const norm = (t) =>
+    String(t)
+      .replace(/\$|\\[()[\]]/g, '')
+      .replace(/^\s*\d{1,2}[.)]\s+/, '')
+      .replace(/\btimes\b/g, 'x')
+      .replace(/\\(?:text|mathrm)\{([^}]*)\}/g, '$1')
+      .replace(/\\(?:ldots|cdots|dots)|\.{2,}|…|⋯/g, '')
+      .replace(/\\times|\\cdot|×|\*/g, 'x')
+      .replace(/[\s$]/g, '')
+      .replace(/\+{2,}/g, '+')
+      .toLowerCase()
+  const pairs = (t) => {
+    const m = new Map()
+    for (let i = 0; i < t.length - 1; i++) m.set(t.slice(i, i + 2), (m.get(t.slice(i, i + 2)) ?? 0) + 1)
+    return m
+  }
+  const dice = (a, b) => {
+    const A = pairs(a)
+    const B = pairs(b)
+    let both = 0
+    for (const [k, n] of A) both += Math.min(n, B.get(k) ?? 0)
+    const total = Math.max(1, a.length - 1 + b.length - 1)
+    return (2 * both) / total
+  }
+  const want = norm(text)
+  if (want.length < 3) return null
+  let best = null
+  for (let i = 0; i < lines.length; i++)
+    for (let span = 1; span <= 3 && i + span <= lines.length; span++) {
+      const joined = lines.slice(i, i + span).map((l) => String(l).replace(/\$|\\[()[\]]/g, '').trim()).join(' ')
+      const score = dice(want, norm(joined))
+      if (!best || score > best.score + 1e-9) best = { text: joined.trim(), score }
+    }
+  return best && best.score >= 0.6 ? best.text : null
+}
+
 // ---------- pointing: "what about this?" ----------
 //
 // The student points at the paper (fingertip found in the browser) and asks. GLM-OCR reads the
@@ -1328,13 +1374,18 @@ Return:
     console.warn('[engine] tutor model:', err.message)
     answer = { ...TROUBLE.think }
   }
+  // The OCR text is what is written: the model's copy of the pointed line can drop a "..." or
+  // add a number ("9. 2 + 4 + 6 + 2 × 50"), so the closest line (or two lines together, a
+  // question written over two lines) of the transcription is used instead.
+  if (about) about = closestLine(about, read.lines) ?? about.replace(/^\s*\\?text\{?\s*\d{1,2}[.)]\s*/, '')
   const key = (t) => String(t || '').replace(/\$|\\[()[\]]|\s/g, '').toLowerCase()
   const part = about && s.parts.find((p) => key(p.raw || p.latex) === key(about))
   emit({ type: 'question', question: { text, lang: s.lang, final: true, ...(about ? { about } : {}), ...(part ? { pointedAt: { partId: part.id, token: '' } } : {}) } })
   s.questions.push({ text, lang: s.lang, about, answer: answer.text, at: Date.now() })
   emit({ type: 'answer', answer })
   remember(s, { kind: 'question', ref: `q:${s.questions.length}`, data: { text, about: about ?? null, answer: answer.text, photo: thumbnail(e.image) } })
-  if (about && looksWork(s, about)) await sendSteps(s, about, emit, { reason: 'question' })
+  // the full solution for any exercise pointed at, a word problem too ("the probability of getting 7")
+  if (about && (looksWork(s, about) || /\d/.test(about))) await sendSteps(s, about, emit, { reason: 'question' })
 }
 
 // ---------- questions ----------

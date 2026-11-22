@@ -616,7 +616,21 @@ function buildBalance({ left, right }, skin) {
   return { kind: 'balance', skin: small ? skin : 'grown', solution: sol, stages, resultTex: eqTex }
 }
 
-function buildPairs({ n }, skin) {
+function buildPairs({ n, a, d, l }, skin) {
+  // a, a + d, ..., l: the same trick, each pair making a + l
+  if (a !== undefined) {
+    const count = (l - a) / d + 1
+    if (![a, d, l].every(isInt) || d < 1 || !isInt(count) || count < 3 || count > 100000 || (a === 1 && d === 1)) return null
+    const total = (count * (a + l)) / 2
+    const stages = [
+      { caption: `Write the numbers ${a}, ${a + d}, ${a + 2 * d}, … up to ${l}: they go up by ${d}, so there are ${count} of them.`, math: `${a} + ${a + d} + ${a + 2 * d} + \dots + ${l}` },
+      { caption: 'Write them again backwards, underneath.' },
+      { caption: `Each pair adds up to ${a + l}: ${a} + ${l}, ${a + d} + ${l - d}, ...`, math: `${a} + ${l} = ${a + d} + ${l - d} = \dots = ${a + l}` },
+      { caption: `There are ${count} pairs, so both rows make ${count} × ${a + l} = ${count * (a + l)}.`, math: `${count} \times ${a + l} = ${count * (a + l)}` },
+      { caption: `That's the sum twice, so halve it: ${total}.`, math: `\frac{${count} \times ${a + l}}{2} = ${total}` },
+    ]
+    return { kind: 'pairs', skin, n: count, first: a, step: d, last: l, total, stages, resultTex: String(total) }
+  }
   if (!isInt(n) || n < 4 || n > 100000) return null
   const total = (n * (n + 1)) / 2
   const stages = [
@@ -1869,7 +1883,12 @@ function readDice(low) {
   if (two && !/\bthe die\b|\b(?:a|one) die\b/.test(t)) {
     // the sum of the two dice: "= 7", "more than 9", "7 or more"... and nothing else asked
     const s = /\b(?:sum|total)\b([^.?!;]*)/.exec(t)
-    if (!s) return null
+    if (!s) {
+      // no "sum": "the probability of getting 7 when 2 dice are rolled / launched" is the sum too
+      const g = /\b(?:getting|get|gets|obtain(?:ing)?|scor(?:e|es|ing)|making|make|rolling|roll|throwing)\s+(?:an?\s+|exactly\s+)?(\d{1,2})\b(?!\s*(?:dice|die|times|sixes))/.exec(t)
+      const k = g ? Number(g[1]) : NaN
+      return k >= 2 && k <= 12 ? { type: 'dice', sum: k, cmp: '=' } : null
+    }
     const rest = s[1]
       .replace(/[()]/g, ' ')
       .replace(/\b(?:when|if|after)\b.*$/, ' ')
@@ -2039,7 +2058,7 @@ function detectSpecial(src) {
   // A question of chance that can't be read whole stops here (STOP): its numbers are no other kind
   const tree = readTree(src)
   if (tree !== undefined) return tree ?? STOP
-  if (/\bdice\b|\bdie\b|🎲/.test(low) && (PCUE.test(low) || /\b(?:roll|rolls|rolled|rolling|throw|throws|thrown|throwing)\b|\b(?:sum|total)\b/.test(low))) {
+  if (/\bdice\b|\bdie\b|🎲/.test(low) && (PCUE.test(low) || /\b(?:roll|rolls|rolled|rolling|throw|throws|thrown|throwing|launch\w*|toss\w*|cast)\b|\b(?:sum|total)\b/.test(low))) {
     const c = readDice(low)
     if (c) return { kind: 'chance', chance: c }
     if (PCUE.test(low)) return STOP
@@ -2186,12 +2205,18 @@ export function detectScene(text) {
   const plain = toExpr(src)
   // 1 + 2 + ... + n: n is the last term (1 + 2 + ... + 99 + 100 is up to 100), the terms
   // written out go up by one, and n is a number (not 10n)
-  const pairs = /^((?:\d+\s*\+\s*){2,})(?:\.\.\.|…)((?:\s*\+\s*\d+(?![\w.]))+)\s*(?:=.*)?$/.exec(src.replace(/\\ldots|\\cdots|\\dots/g, '...'))
+  // Also any evenly spaced sum (2 + 4 + 6 + ... + 100, 5 + 10 + ... + 2 × 50): the same trick.
+  const dotted = src.replace(/\\ldots|\\cdots|\\dots|⋯/g, '...').replace(/\s*(?:\\times|\\cdot|×|\*)\s*/g, 'x')
+  const pairs = /^((?:\d+\s*\+\s*){2,})(?:\.\.\.|…)((?:\s*\+\s*\d+(?:\s*x\s*\d+)?(?![\w.]))+)\s*(?:=.*)?$/.exec(dotted)
   if (pairs) {
-    const head = pairs[1].split('+').map((t) => t.trim()).filter(Boolean).map(Number)
-    const tail = pairs[2].split('+').map((t) => t.trim()).filter(Boolean).map(Number)
-    const steps = (ns) => ns.every((v, i) => i === 0 || v === ns[i - 1] + 1)
-    if (head[0] === 1 && steps(head) && steps(tail) && tail[0] > head[head.length - 1]) return { kind: 'pairs', expression: String(tail[tail.length - 1]) }
+    const val = (t) => t.split('x').reduce((p, v) => p * Number(v), 1)
+    const head = pairs[1].split('+').map((t) => t.trim()).filter(Boolean).map(val)
+    const tail = pairs[2].split('+').map((t) => t.trim()).filter(Boolean).map(val)
+    const d = head[1] - head[0]
+    const steps = (ns) => ns.every((v, i) => i === 0 || v === ns[i - 1] + d)
+    const last = tail[tail.length - 1]
+    if (d > 0 && steps(head) && steps(tail) && tail[0] > head[head.length - 1] && (tail[0] - head[head.length - 1]) % d === 0)
+      return { kind: 'pairs', expression: head[0] === 1 && d === 1 ? String(last) : `${head[0]},${d},${last}` }
   }
   // y = f(x) / f(x) = ...: drawn as written (y = \frac{1}{x}, not ((1)/(x)))
   const fn = /^(?:y|f\s*\(\s*x\s*\))\s*=\s*(.+)$/.exec(plain)
@@ -2299,7 +2324,14 @@ export function buildScene(choice, { age } = {}) {
       const right = linear(compile(sides[1]))
       return left && right ? buildBalance({ left, right }, skin) : null
     }
-    if (kind === 'pairs') return buildPairs({ n: Number(String(choice.expression).replace(/[^\d]/g, '')) }, skin)
+    if (kind === 'pairs') {
+      const e = String(choice.expression)
+      if (/^\d+,\d+,\d+$/.test(e)) {
+        const [a, d, l] = e.split(',').map(Number)
+        return buildPairs({ a, d, l }, skin)
+      }
+      return buildPairs({ n: Number(e.replace(/[^\d]/g, '')) }, skin)
+    }
     if (kind === 'area') {
       const variable = choice.variable || 'x'
       const f = compile(choice.expression, variable)
