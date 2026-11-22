@@ -45,9 +45,6 @@ const emit = defineEmits<{ video: [el: HTMLVideoElement]; retry: []; usePaper: [
 // the animation's video card sits on the camera; the speech bubbles make room for it
 const docked = computed(() => player.mode === 'poster' || player.mode === 'dock')
 
-const captured = computed(() => props.parts.filter((p) => props.crops[p.id]))
-const RING = { correct: 'ring-right-mark', wrong: 'ring-wrong-mark', reading: 'ring-lagoon-bright', unsure: 'ring-[#e0a21a]' }
-const BADGE = { correct: 'bg-right-mark', wrong: 'bg-wrong-mark', reading: 'bg-lagoon-bright', unsure: 'bg-[#e0a21a]' }
 
 const video = ref<HTMLVideoElement | null>(null)
 const stage = ref<HTMLElement | null>(null)
@@ -105,7 +102,7 @@ const hint = computed(() => {
     <div
       ref="stage"
       class="relative w-full shrink-0 overflow-hidden rounded-[20px] bg-[#0b1d28] shadow-[0_30px_60px_-30px_rgb(0_0_0/0.8)]"
-      :style="{ aspectRatio: `${vw} / ${vh}`, maxWidth: `calc((100vh - ${captured.length ? 300 : 200}px) * ${vw / vh})` }"
+      :style="{ aspectRatio: `${vw} / ${vh}`, maxWidth: `calc((100vh - 200px) * ${vw / vh})` }"
     >
       <video v-show="live" ref="video" muted playsinline autoplay class="absolute inset-0 size-full object-contain" :class="rotated ? 'rotate-180' : ''" @loadedmetadata="onMeta" />
 
@@ -191,22 +188,6 @@ const hint = computed(() => {
         </div>
       </Transition>
     </div>
-
-    <!-- every line the camera captured; pick one to see it again -->
-    <TransitionGroup v-if="captured.length" tag="div" name="list" class="relative flex w-full shrink-0 gap-2.5 overflow-x-auto px-1 pb-1" :style="{ maxWidth: `calc((100vh - 300px) * ${vw / vh})` }" aria-label="Lines the camera captured">
-      <button
-        v-for="p in captured"
-        :key="p.id"
-        type="button"
-        :aria-pressed="p.id === selectedId"
-        class="relative shrink-0 overflow-hidden rounded-xl bg-white ring-2 transition-transform duration-300 hover:-translate-y-1"
-        :class="[RING[p.verdict], p.id === selectedId ? 'ring-4' : '']"
-        @click="emit('select', p.id)"
-      >
-        <img :src="crops[p.id]" :alt="`Line ${p.id}, as the camera saw it`" class="h-14 w-auto max-w-[260px] object-cover object-left" />
-        <span class="absolute left-1 top-1 flex size-5 items-center justify-center rounded-full text-[11px] font-black text-white" :class="BADGE[p.verdict]">{{ p.id }}</span>
-      </button>
-    </TransitionGroup>
 
     <!-- no camera: say why and offer a way forward -->
     <div v-if="!paper && camera !== 'live'" class="absolute inset-0 flex flex-col items-center justify-center gap-4 p-8 text-center text-white">
