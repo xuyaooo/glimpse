@@ -1,26 +1,62 @@
 <script setup lang="ts">
-// The right half of the scan window: what the camera saw for a line, what was read from it,
-// whether it's right, the explanation (in step with the drawing on the camera), similar
-// exercises, answers to questions, and what's going on.
+// The right half of the scan window, in two tabs. "This line": what the camera saw for a line,
+// what was read from it, whether it's right, the explanation (in step with the drawing on the
+// camera), the worked solution, similar exercises, answers to questions, and what's going on.
+// "Whole sheet": every exercise on the paper (SheetPanel), filled by "Check my whole sheet".
 import ActivityFeed from './ActivityFeed.vue'
 import StepByStep from './StepByStep.vue'
+import SheetPanel from './SheetPanel.vue'
 import Confetti from '../Confetti.vue'
 import MathTex from '../MathTex.vue'
 import { confirmReply, dismissAnswer, pickExercise, state } from '@/lib/engine'
 import { STYLE_LABEL } from '@/lib/mock'
 import { speak } from '@/lib/speech'
-import type { Hint, Teaching, WrittenPart } from '@/lib/types'
+import type { Hint, SheetReport, Teaching, WrittenPart } from '@/lib/types'
 import { youNote } from '@/lib/useWork'
 
 // notice: what Glim said that isn't about a line (no new line seen, the tutor not reached)
-defineProps<{ selected: WrittenPart | null; teaching: Teaching | null; step: number; crop: string | null; hint: Hint | null; notice?: Hint | null }>()
-defineEmits<{ step: [n: number]; replay: []; select: [id: number] }>()
+defineProps<{
+  selected: WrittenPart | null
+  teaching: Teaching | null
+  step: number
+  crop: string | null
+  hint: Hint | null
+  notice?: Hint | null
+  tab: 'line' | 'sheet'
+  sheet: SheetReport | null
+  sheetChecking: boolean
+  /** Nobody is writing and the sheet isn't checked: the tab shows a pulsing dot. */
+  nudge?: boolean
+}>()
+defineEmits<{ step: [n: number]; replay: []; select: [id: number]; 'update:tab': [tab: 'line' | 'sheet']; checkSheet: []; explain: [id: number] }>()
 
 const BADGE = { correct: 'bg-right-mark', wrong: 'bg-wrong-mark', reading: 'bg-lagoon-bright', unsure: 'bg-[#e0a21a]' }
 </script>
 
 <template>
   <div class="flex min-h-0 flex-col gap-4 overflow-y-auto pb-2 pr-1">
+    <!-- This line / Whole sheet -->
+    <div role="tablist" aria-label="Show" class="sticky top-0 z-10 grid grid-cols-2 gap-1 rounded-2xl bg-white/90 p-1 shadow-sm ring-1 ring-line backdrop-blur">
+      <button type="button" role="tab" :aria-selected="tab === 'line'" class="flex min-h-10 items-center justify-center gap-2 rounded-xl text-[14px] font-black transition" :class="tab === 'line' ? 'bg-lagoon text-white shadow' : 'text-ink-2 hover:bg-line-2'" @click="$emit('update:tab', 'line')">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16.9 3.3a2 2 0 0 1 2.8 0l1 1a2 2 0 0 1 0 2.8L9.4 18.4 4 20l1.6-5.4z" /></svg>
+        This line
+        <span v-if="selected" class="rounded-full px-1.5 text-[12px] tabular-nums" :class="tab === 'line' ? 'bg-white/20' : 'bg-line-2'">#{{ selected.id }}</span>
+      </button>
+      <button type="button" role="tab" :aria-selected="tab === 'sheet'" class="flex min-h-10 items-center justify-center gap-2 rounded-xl text-[14px] font-black transition" :class="tab === 'sheet' ? 'bg-lagoon text-white shadow' : 'text-ink-2 hover:bg-line-2'" @click="$emit('update:tab', 'sheet')">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4h6v3H9zM8 5.5H6.5A1.5 1.5 0 0 0 5 7v12.5A1.5 1.5 0 0 0 6.5 21h11a1.5 1.5 0 0 0 1.5-1.5V7a1.5 1.5 0 0 0-1.5-1.5H16M8.5 13l2.5 2.5 4.5-5" /></svg>
+        Whole sheet
+        <span v-if="sheetChecking" class="size-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" aria-label="checking" />
+        <span v-else-if="nudge && tab !== 'sheet'" class="relative flex size-2.5" aria-label="ready to check"><span class="absolute inline-flex size-full animate-ping rounded-full bg-tangerine opacity-75" /><span class="relative size-2.5 rounded-full bg-tangerine" /></span>
+        <span v-else-if="sheet && sheet.total" class="rounded-full px-1.5 text-[12px] tabular-nums" :class="tab === 'sheet' ? 'bg-white/20' : sheet.right === sheet.total ? 'bg-right-bg text-[#136e43]' : 'bg-tangerine-soft text-[#b4531a]'">{{ sheet.right }}/{{ sheet.total }}</span>
+      </button>
+    </div>
+
+    <template v-if="tab === 'sheet'">
+      <SheetPanel :report="sheet" :checking="sheetChecking" :parts="state.parts" :selected-id="selected?.id ?? null" @check="$emit('checkSheet')" @explain="(id) => $emit('explain', id)" @select="(id) => { $emit('select', id); $emit('update:tab', 'line') }" />
+      <ActivityFeed :limit="3" />
+    </template>
+
+    <template v-else>
     <!-- 1. The line: camera → digital -->
     <section aria-label="What I read" class="relative rounded-[24px] bg-white p-5 shadow-[0_14px_30px_-22px_rgb(24_41_74/0.5)]">
       <div class="flex items-center justify-between gap-2">
@@ -203,5 +239,6 @@ const BADGE = { correct: 'bg-right-mark', wrong: 'bg-wrong-mark', reading: 'bg-l
         </button>
       </div>
     </section>
+    </template>
   </div>
 </template>

@@ -199,7 +199,17 @@ const { moving } = usePencilLift(
 // ------------------------------------------------------------------ "Done writing?" and the whole sheet
 
 const scanPrompt = ref(false)
+/** The report as a window (unused: it shows in the right panel's "Whole sheet" tab). */
 const sheetOpen = ref(false)
+/** The right panel: "This line" or "Whole sheet". */
+const panelTab = ref<'line' | 'sheet'>('line')
+// a new line read, a question answered or a solution on its way: back to "This line"
+watch(
+  () => [state.parts.length, state.answer?.text, state.steps?.at],
+  (now, before) => {
+    if (before && now.some((v, i) => v !== before[i] && v)) panelTab.value = 'line'
+  },
+)
 let promptTimer = 0
 /** The pencil stopped: ask, don't read (it goes away if writing starts again, or by itself). */
 function offerScan() {
@@ -221,21 +231,46 @@ function checkWholeSheet() {
   if (!state.student || state.asking || ui.summaryOpen || state.status === 'reading' || state.status === 'thinking') return
   resume()
   flash.value++
-  sheetOpen.value = true
+  panelTab.value = 'sheet'
   const v = video.value
   checkSheet(live.value && state.connection === 'live' && v?.videoWidth ? (grab(v, null, rotated.value) ?? undefined) : undefined)
 }
-// the report couldn't be made (the reader or the tutor failed): Glim's message says so
+// the report couldn't be made (the reader or the tutor failed): Glim's message says so, on "This line"
 watch(
   () => state.sheetChecking,
-  (now, before) => before && !now && !state.sheet && (sheetOpen.value = false),
+  (now, before) => before && !now && !state.sheet && (panelTab.value = 'line'),
 )
 function explain(partId: number) {
-  sheetOpen.value = false
   ui.selectedPartId = partId
+  panelTab.value = 'line'
   explainPart(partId)
 }
 onBeforeUnmount(() => window.clearTimeout(promptTimer))
+
+// Nobody has written for a while and the sheet hasn't been checked since the last line: make
+// "Check my whole sheet" stand out (it glows, a bubble points at it). Any mode, popup or not.
+const IDLE_NUDGE_MS = 6000
+const lastActivity = ref(performance.now())
+const clock = ref(performance.now())
+const clockTimer = window.setInterval(() => (clock.value = performance.now()), 1000)
+onBeforeUnmount(() => window.clearInterval(clockTimer))
+watch(moving, (m) => m && (lastActivity.value = performance.now()))
+watch(
+  () => [state.parts.length, state.status],
+  () => (lastActivity.value = performance.now()),
+)
+const sheetUpToDate = computed(() => !!state.sheet && state.parts.every((p) => p.at <= state.sheet!.at))
+const nudgeSheet = computed(
+  () =>
+    state.parts.some((p) => p.verdict !== 'reading') &&
+    !state.sheetChecking &&
+    !sheetUpToDate.value &&
+    !scanPrompt.value &&
+    !state.asking &&
+    state.status === 'watching' &&
+    !moving.value &&
+    clock.value - lastActivity.value >= IDLE_NUDGE_MS,
+)
 // development only: open the prompt without moving a pencil (browser tests)
 if (import.meta.env.DEV) (window as unknown as { __glimpseScan?: object }).__glimpseScan = { offerScan, checkWholeSheet }
 useManualTriggers({ cut: capture, askStart: onAskStart, askEnd: onAskEnd })
@@ -495,9 +530,15 @@ const STATUS: Record<string, string> = {
         :crop="selected ? (ui.crops[selected.id] ?? null) : null"
         :hint="hint"
         :notice="notice"
+        v-model:tab="panelTab"
+        :sheet="state.sheet"
+        :sheet-checking="state.sheetChecking"
+        :nudge="nudgeSheet"
         @step="player.go"
         @replay="player.play"
         @select="(id) => (ui.selectedPartId = id)"
+        @check-sheet="checkWholeSheet"
+        @explain="explain"
       />
     </main>
 
@@ -514,7 +555,23 @@ const STATUS: Record<string, string> = {
       <div class="ml-auto flex flex-wrap gap-2">
         <button v-if="state.parts.length || state.questions.length" type="button" class="min-h-11 rounded-xl border-2 border-line bg-white px-4 text-[14px] font-black transition-transform hover:-translate-y-0.5" title="End the session and see how it went" @click="finish">Finish</button>
         <button type="button" class="btn-lagoon min-h-11 rounded-xl px-4 text-[14px] font-black transition-transform hover:-translate-y-0.5 active:scale-95" @click="capture">Read my line now</button>
-        <button type="button" class="min-h-11 rounded-xl border-2 border-lagoon-soft bg-white px-4 text-[14px] font-black text-lagoon-deep transition-transform hover:-translate-y-0.5 hover:bg-lagoon-mist active:scale-95" title="Glim checks every exercise on the sheet" @click="checkWholeSheet">Check my whole sheet</button>
+        <div class="relative">
+          <!-- nobody is writing: a nudge towards the whole-sheet check -->
+          <Transition name="fade">
+            <span v-if="nudgeSheet" class="sheet-bubble pointer-events-none absolute bottom-full right-0 mb-3 flex w-max max-w-[260px] items-center gap-2 rounded-2xl bg-ink px-3.5 py-2 text-[13px] font-black text-white shadow-xl" role="status">
+              <span aria-hidden="true">✍️</span> Finished writing? Check every exercise
+            </span>
+          </Transition>
+          <button
+            type="button"
+            class="min-h-11 rounded-xl border-2 px-4 text-[14px] font-black transition-all duration-300 hover:-translate-y-0.5 active:scale-95"
+            :class="nudgeSheet ? 'sheet-nudge border-tangerine bg-tangerine text-white' : 'border-lagoon-soft bg-white text-lagoon-deep hover:bg-lagoon-mist'"
+            title="Glim checks every exercise on the sheet"
+            @click="checkWholeSheet"
+          >
+            <span v-if="nudgeSheet" aria-hidden="true">📋 </span>Check my whole sheet
+          </button>
+        </div>
         <form v-if="realEngine" class="flex min-h-11 items-center gap-1 rounded-xl border-2 border-line bg-white pl-3 pr-1" @submit.prevent="ask(hands.recentTip())">
           <label for="question" class="sr-only">Your question</label>
           <input id="question" v-model="questionText" type="text" autocomplete="off" placeholder="Your question (optional), then point" class="w-[230px] bg-transparent text-[14px] font-semibold outline-none" />
@@ -549,3 +606,43 @@ const STATUS: Record<string, string> = {
     <SheetCheck :prompt="scanPrompt" :checking="state.sheetChecking" :report="state.sheet" :open="sheetOpen" @line="checkLine" @check="checkWholeSheet" @later="closePrompt" @close="sheetOpen = false" @explain="explain" />
   </div>
 </template>
+
+<style scoped>
+/* "Check my whole sheet" when nobody is writing: a soft glow that pulses, and a bubble that floats */
+.sheet-nudge {
+  animation: sheet-glow 1.6s ease-out infinite;
+}
+@keyframes sheet-glow {
+  0% {
+    box-shadow: 0 0 0 0 rgb(244 122 42 / 0.55);
+  }
+  100% {
+    box-shadow: 0 0 0 14px rgb(244 122 42 / 0);
+  }
+}
+.sheet-bubble {
+  animation: sheet-float 1.8s ease-in-out infinite alternate;
+}
+.sheet-bubble::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  right: 28px;
+  border: 7px solid transparent;
+  border-top-color: var(--color-ink);
+}
+@keyframes sheet-float {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(-4px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sheet-nudge,
+  .sheet-bubble {
+    animation: none;
+  }
+}
+</style>
