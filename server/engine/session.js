@@ -11,6 +11,7 @@ import { sceneFor, texToPlain, compile, toExpr } from './scenes.js'
 import { REVIEW_VERSION, suggestReview } from './review.js'
 import { DOMAIN_KINDS, SUBJECT_OF } from './domains.js'
 import { sheetReport } from './sheet.js'
+import { partialArray } from './partial.js'
 
 export const ENGINE_VERSION = 'hackathon-engine-1'
 
@@ -688,19 +689,21 @@ Write maths in the feedback as plain text that can be read aloud (e.g. x², 3/4)
 
 // ---------- the whole solution, step by step ----------
 
+// The hints come first: the answer is streamed, and structured output writes the required
+// properties in this order, so the hints reach the student in a second or two while the steps
+// are still being written (the student reads the hints first anyway).
 const STEPS_SCHEMA = {
   type: 'object',
   properties: {
-    title: { type: 'string' },
-    // hints first: the student tries before any step is shown (never the answer in them)
     hints: { type: 'array', items: { type: 'string' } },
     steps: { type: 'array', items: { type: 'object', properties: { say: { type: 'string' }, math: { type: 'string' } }, required: ['say', 'math'] } },
     result: { type: 'string' },
+    exercise: { type: 'string' },
+    title: { type: 'string' },
     antiderivative: { type: 'string' },
     derivative: { type: 'string' },
-    exercise: { type: 'string' },
   },
-  required: ['steps', 'result', 'exercise'],
+  required: ['hints', 'steps', 'result', 'exercise'],
 }
 const mathKey = (t) => String(t || '').replace(/\$|\\[()[\]]|\s|=+$/g, '').toLowerCase()
 const unwrap = (t) => String(t || '').replace(/^\$+|\$+$/g, '').trim()
@@ -837,7 +840,8 @@ async function sendSteps(s, exercise, emit, { reason = 'line', image } = {}) {
   const lang = LANG_NAME[s.lang] ? s.lang : 'en'
   s.topics = [...new Set([...(s.topics || []), unwrap(stripMath(exercise))])].slice(-30)
   const about = exerciseAbout(exercise)
-  const steps = { about, title: 'Step by step', items: [], result: '', lang, reason, at: Date.now() }
+  // writing: the tutor is still writing it (hints and steps arrive as they are written)
+  const steps = { about, title: 'Step by step', items: [], result: '', lang, reason, at: Date.now(), writing: true }
   emit({ type: 'status', state: 'thinking' })
   // The photo lets the tutor fix OCR slips, but it also "fixes" correct numbers from the photo
   // (seen live: the bound 1 of an integral read as 4, so the steps solved another exercise). When
@@ -849,13 +853,30 @@ async function sendSteps(s, exercise, emit, { reason = 'line', image } = {}) {
     computable = null
   }
   const photo = image && !computable ? image : undefined
+  let sceneDone = false
   const scene = decideScene(s, exercise).then((sc) => {
+    sceneDone = true
     if (sc) {
       Object.assign(steps, { scene: sc, result: sc.resultTex, ...(sc.exerciseTex ? { about: sc.exerciseTex.replace(/=\s*$/, '').trim() } : {}) })
       emit({ type: 'steps', steps: { ...steps } }) // the animation can start now
     }
     return sc
   })
+  // While the tutor writes: each hint as soon as it is complete (checked against the answer known
+  // so far: the animation's, or the sum computed), and each step when there is no animation to
+  // check the working against (with one, the steps wait for the end, where they are checked).
+  let sent = ''
+  const sure = codeAnswer(exercise)
+  function early(text) {
+    const known = steps.scene?.resultTex || sure
+    const hints = safeHints(partialArray(text, 'hints').items, known)
+    const items = sceneDone && !steps.scene ? stepItems(partialArray(text, 'steps').items) : []
+    const now = `${hints.length}/${items.length}`
+    if (now === sent || (!hints.length && !items.length)) return
+    sent = now
+    Object.assign(steps, { hints, items }) // kept: the animation's update carries them too
+    emit({ type: 'steps', steps: { ...steps } })
+  }
   const worked = complete('tutor', {
     messages: [
       {
@@ -877,6 +898,7 @@ Compute carefully and check the result before answering.`,
     schema: STEPS_SCHEMA,
     maxTokens: 1400,
     temperature: 0.1,
+    onText: early,
   }).catch(() => null)
   let [sc, out] = await Promise.all([scene.catch(() => null), worked])
   let sceneText = exercise // what the animation was built from (what Laya may learn)
@@ -903,10 +925,7 @@ Compute carefully and check the result before answering.`,
     if (better?.antiderivative) sc = { ...better, decidedBy: sc.decidedBy, laya: sc.laya }
   }
   if (out) s.ai.bigCalls += 1
-  let items = (Array.isArray(out?.json?.steps) ? out.json.steps : [])
-    .filter((x) => x?.say || x?.math)
-    .slice(0, 8)
-    .map((x) => ({ say: plainReply(x.say), math: unwrap(x.math) }))
+  let items = stepItems(out?.json?.steps)
   // The animation's result is computed, so it usually wins over the model's. When both are numbers:
   // - they disagree and the animation's value is the written arithmetic, computed exactly: the
   //   tutor's working is wrong, so only the animation is shown;
@@ -941,11 +960,12 @@ Compute carefully and check the result before answering.`,
   }
   if (!items.length && !sc && !dropped) {
     s.stepsFor = null
+    if (sent) emit({ type: 'steps', steps: { ...steps, hints: [], items: [], writing: false } }) // what was sent early goes
     return
   }
   const title = typeof out?.json?.title === 'string' && out.json.title.trim()
   const hints = safeHints(out?.json?.hints, result || sc?.resultTex || '')
-  Object.assign(steps, { title: title || 'Step by step', items, result, hints })
+  Object.assign(steps, { title: title || 'Step by step', items, result, hints, writing: false })
   emit({ type: 'steps', steps: { ...steps } })
   remember(s, { kind: 'steps', ref: `steps:${key}`, data: { about: steps.about, title: steps.title, result: steps.result, scene: sc ?? null, items, hints } })
 }
@@ -1302,6 +1322,23 @@ function remember(s, { kind, ref, data, at }) {
 // The line of the transcription (or two or three consecutive lines together) closest to `text`,
 // by shared letter pairs (Dice coefficient on the text without spaces, $ and numbering); null if
 // none is close enough.
+// The tutor's steps, as shown: at most 8, plain text to read and LaTeX to write.
+function stepItems(list) {
+  return (Array.isArray(list) ? list : [])
+    .filter((x) => x?.say || x?.math)
+    .slice(0, 8)
+    .map((x) => ({ say: plainReply(x.say), math: unwrap(x.math) }))
+}
+// The answer of a sum computed by code ("47 + 38 = 75" -> "85"), or '' (to check the hints early).
+function codeAnswer(exercise) {
+  try {
+    const v = evaluate(String(toPlain(exercise) || '').split('=')[0])
+    return v ? (v.d === 1 ? String(v.n) : `\\frac{${v.n}}{${v.d}}`) : ''
+  } catch {
+    return ''
+  }
+}
+
 /**
  * The tutor's hints (at most 3), without any that gives the answer away: one that holds the
  * answer itself, or says it ("= 12", "the answer is 4"), for a short answer too.
@@ -1317,6 +1354,7 @@ export function safeHints(hints, result) {
     .filter((h) => {
       if (!h) return false
       const f = flat(h)
+      if (/\b(?:answer|result|solution)\s+(?:is|will be|should be)\b/i.test(h)) return false // "the answer is ..." 
       if (whole.length > 1 && f.includes(whole)) return false
       if (value.length > 1 && f.includes(value)) return false
       return !(says && (says.test(f) || says.test(texToPlain(h).toLowerCase())))

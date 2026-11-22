@@ -62,8 +62,8 @@ export async function chat({ model, messages, options = {}, think, signal, forma
 }
 
 // Streaming chat. Yields { thinking } / { content } pieces, then { done, stats }.
-export async function* chatStream({ model, messages, options = {}, think, signal }) {
-  const r = await post('/api/chat', chatBody({ model, messages, options, think, stream: true }), signal)
+export async function* chatStream({ model, messages, options = {}, think, signal, format }) {
+  const r = await post('/api/chat', chatBody({ model, messages, options, think, stream: true, format }), signal)
   const decoder = new TextDecoder()
   let buf = ''
   for await (const chunk of r.body) {

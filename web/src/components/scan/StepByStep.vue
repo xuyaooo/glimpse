@@ -31,7 +31,10 @@ watch(
 const total = computed(() => props.steps.items.length)
 // the tutor's hints, or (an older solution without any) what the first step says to do
 const hints = computed(() => (props.steps.hints?.length ? props.steps.hints : props.steps.items[0]?.say ? [props.steps.items[0].say] : []))
-const allSteps = computed(() => total.value > 0 && stepsShown.value >= total.value)
+// every step seen (and no more coming): the answer opens
+const allSteps = computed(() => total.value > 0 && stepsShown.value >= total.value && !props.steps.writing)
+// the steps on show: all of them, as they arrive, once the whole solution is asked for
+const visible = computed(() => (whole.value ? total.value : Math.min(stepsShown.value, total.value)))
 const answerTex = computed(() => props.steps.result || props.steps.scene?.resultTex || '')
 const answerVisible = computed(() => answerShown.value || whole.value || allSteps.value)
 // the whole process is out: every step (or the animation, for a solution without written steps)
@@ -59,6 +62,11 @@ function showWhole() {
   stepsShown.value = total.value
   hintsShown.value = hints.value.length
 }
+// the hints that came in while the whole solution was open are shown too
+watch(
+  () => hints.value.length,
+  (n) => whole.value && (hintsShown.value = n),
+)
 function playFrom(i: number) {
   if (player.steps?.at !== props.steps.at || !player.mode || player.mode === 'poster') {
     player.steps = props.steps
@@ -102,18 +110,19 @@ function playFrom(i: number) {
         <button v-if="total && stepsShown < total" type="button" class="min-h-10 rounded-xl border-2 border-lagoon-soft bg-white px-3.5 text-[14px] font-black text-lagoon-deep transition hover:-translate-y-0.5" @click="nextStep">
           {{ stepsShown ? 'Show the next step' : 'Show the first step' }}
         </button>
+        <span v-else-if="steps.writing && hints.length" class="inline-flex min-h-10 items-center gap-2 px-1 text-[13px] font-bold text-ink-2"><span class="size-3.5 animate-spin rounded-full border-2 border-lagoon-soft border-t-lagoon" aria-hidden="true" /> {{ total ? 'Writing the next step…' : 'Writing the steps…' }}</span>
         <button type="button" class="min-h-10 rounded-xl px-3 text-[13px] font-bold text-ink-2 underline-offset-4 hover:underline" @click="showWhole">Show the whole solution</button>
       </div>
     </div>
 
     <!-- 2. the steps the student opened: all of them, the whole process, at the end -->
-    <div v-if="stepsShown" class="flex flex-col gap-2">
+    <div v-if="visible" class="flex flex-col gap-2">
       <div class="flex items-center justify-between gap-2">
         <h3 class="text-[15px] font-black">{{ finished ? 'The whole process' : 'Steps so far' }}</h3>
-        <span class="rounded-full bg-line-2 px-2.5 py-0.5 text-[12px] font-black tabular-nums text-ink-2">{{ Math.min(stepsShown, total) }} / {{ total }}</span>
+        <span class="rounded-full bg-line-2 px-2.5 py-0.5 text-[12px] font-black tabular-nums text-ink-2">{{ visible }} / {{ total }}{{ steps.writing ? '…' : '' }}</span>
       </div>
       <TransitionGroup tag="ol" name="list" class="m-0 flex list-none flex-col gap-2 p-0">
-        <li v-for="(st, i) in steps.items.slice(0, stepsShown)" :key="`${steps.at}-${i}`" class="flex items-start gap-3 rounded-2xl bg-lagoon-mist/70 px-3 py-2.5">
+        <li v-for="(st, i) in steps.items.slice(0, visible)" :key="`${steps.at}-${i}`" class="flex items-start gap-3 rounded-2xl bg-lagoon-mist/70 px-3 py-2.5">
           <span class="flex size-7 shrink-0 items-center justify-center rounded-full bg-lagoon text-[12px] font-black text-white">{{ i + 1 }}</span>
           <div class="min-w-0 flex-1">
             <p :lang="steps.lang" class="text-[14px] font-semibold leading-snug">{{ st.say }}</p>
@@ -125,7 +134,8 @@ function playFrom(i: number) {
         </li>
       </TransitionGroup>
     </div>
-    <p v-else-if="!total" class="flex items-center gap-2 text-[13px] font-bold text-ink-2"><span class="size-4 animate-spin rounded-full border-2 border-lagoon-soft border-t-lagoon" aria-hidden="true" /> Glim is writing the hints and the steps…</p>
+    <p v-if="steps.writing && !hints.length && !total" class="flex items-center gap-2 text-[13px] font-bold text-ink-2"><span class="size-4 animate-spin rounded-full border-2 border-lagoon-soft border-t-lagoon" aria-hidden="true" /> Glim is thinking of a first hint…</p>
+    <p v-else-if="whole && steps.writing" class="flex items-center gap-2 text-[13px] font-bold text-ink-2"><span class="size-4 animate-spin rounded-full border-2 border-lagoon-soft border-t-lagoon" aria-hidden="true" /> Glim is still writing the steps…</p>
 
     <!-- 3. the answer: hidden until asked for, or once every step is out -->
     <template v-if="answerTex">

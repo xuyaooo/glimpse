@@ -136,6 +136,8 @@ export interface WorkedSteps {
   scene?: Scene
   /** 'question': the child asked about it (the animation opens by itself). */
   reason?: 'line' | 'question'
+  /** The tutor is still writing it: its hints and steps arrive one by one. */
+  writing?: boolean
 }
 
 /** The whole paper as the OCR model read it: lines of text and maths pieces. */

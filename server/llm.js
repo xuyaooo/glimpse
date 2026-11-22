@@ -19,7 +19,7 @@
 //                     whose function stops at 60 s), then the child gets the "try again" message.
 // A role with its own <ROLE>_BASE_URL (another provider) doesn't get AI_API_KEY, AI_EXTRA_BODY
 // or AI_THINK_OFF: those belong to the AI_BASE_URL provider.
-import { chat as ollamaChat, OLLAMA_URL } from './ollama.js'
+import { chat as ollamaChat, chatStream as ollamaStream, OLLAMA_URL } from './ollama.js'
 
 const DEFAULT_MODEL = { ocr: 'glm-ocr', tutor: 'qwen3.5' }
 const PROVIDERS = ['ollama', 'openai']
@@ -104,14 +104,59 @@ function extractJson(text, schema) {
   return other
 }
 
+// onText is the caller's: a mistake in it never breaks the answer
+function tell(onText, text) {
+  try {
+    onText(text)
+  } catch (err) {
+    console.warn('[llm] onText:', err.message)
+  }
+}
+// An OpenAI-style stream ("data: {choices: [{delta: {content}}]}" ... "data: [DONE]") -> the same
+// shape as a whole answer: { choices: [{ message: { content }, finish_reason }] } (or { error }).
+async function readEvents(r, onText) {
+  const decoder = new TextDecoder()
+  let buf = ''
+  let text = ''
+  let finish = null
+  for await (const chunk of r.body) {
+    buf += decoder.decode(chunk, { stream: true })
+    let nl
+    while ((nl = buf.indexOf('\n')) >= 0) {
+      const line = buf.slice(0, nl).trim()
+      buf = buf.slice(nl + 1)
+      if (!line.startsWith('data:')) continue
+      const data = line.slice(5).trim()
+      if (data === '[DONE]') continue
+      let ev
+      try {
+        ev = JSON.parse(data)
+      } catch {
+        continue
+      }
+      if (ev.error) return { error: ev.error }
+      const c = ev.choices?.[0]
+      if (c?.finish_reason) finish = c.finish_reason
+      const piece = c?.delta?.content
+      if (typeof piece === 'string' && piece) {
+        text += piece
+        tell(onText, text)
+      }
+    }
+  }
+  return { choices: [{ message: { content: text }, finish_reason: finish }] }
+}
+
 // messages: [{ role, content, images?: [base64 JPEG] }]
 // schema:   optional JSON schema -> structured output; the result is parsed into `json`.
 // think:    false = no reasoning (Ollama `think`; ignored by other providers unless they
 //           understand it), true = allow reasoning.
+// onText:   optional; the answer is streamed and onText(textSoFar) is called as it is written
+//           (to show the start of a long answer early). The result is the same as without it.
 // Throws (with the role and where it went wrong) when the model can't be reached, takes longer
 // than <ROLE>_TIMEOUT_MS, answers with an error, or gives no answer: callers then tell the
 // child to try again, and log the reason.
-export async function complete(role, { messages, schema, maxTokens = 800, temperature = 0.3, think = false, model, signal } = {}) {
+export async function complete(role, { messages, schema, maxTokens = 800, temperature = 0.3, think = false, model, signal, onText } = {}) {
   const cfg = roleConfig(role)
   const m = model || cfg.model
   const started = Date.now()
@@ -128,16 +173,16 @@ export async function complete(role, { messages, schema, maxTokens = 800, temper
   }
   let text
   if (cfg.provider === 'ollama') {
+    const req = { model: m, messages, think, format: schema, signal: sig, options: { temperature, num_ctx: 8192, num_predict: maxTokens } }
     try {
-      const out = await ollamaChat({
-        model: m,
-        messages,
-        think,
-        format: schema,
-        signal: sig,
-        options: { temperature, num_ctx: 8192, num_predict: maxTokens },
-      })
-      text = out.content
+      if (onText) {
+        text = ''
+        for await (const piece of ollamaStream(req)) {
+          if (!piece.content) continue
+          text += piece.content
+          tell(onText, text)
+        }
+      } else text = (await ollamaChat(req)).content
     } catch (err) {
       throw failed(err)
     }
@@ -159,6 +204,7 @@ export async function complete(role, { messages, schema, maxTokens = 800, temper
     }
     if (schema) body.response_format = { type: 'json_schema', json_schema: { name: 'output', schema, strict: false } }
     Object.assign(body, cfg.extraBody, think ? {} : cfg.thinkOff)
+    if (onText) body.stream = true
     let out
     try {
       const r = await fetch(where, {
@@ -167,12 +213,16 @@ export async function complete(role, { messages, schema, maxTokens = 800, temper
         body: JSON.stringify(body),
         signal: sig,
       })
-      const raw = await r.text()
+      // streamed (server-sent events): the pieces of the answer, put back together as one answer
+      if (onText && r.ok && /event-stream/.test(r.headers.get('content-type') || '')) out = await readEvents(r, onText)
+      const raw = out ? '' : await r.text()
       if (!r.ok) throw new Error(`${role} model error ${r.status}: ${raw.slice(0, 300)}`)
-      try {
-        out = JSON.parse(raw)
-      } catch {
-        throw new Error(`${role} model at ${where} didn't answer with JSON: ${raw.slice(0, 120)}`)
+      if (!out) {
+        try {
+          out = JSON.parse(raw)
+        } catch {
+          throw new Error(`${role} model at ${where} didn't answer with JSON: ${raw.slice(0, 120)}`)
+        }
       }
     } catch (err) {
       throw failed(err)
