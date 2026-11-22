@@ -29,7 +29,7 @@ LauzHack 2026, for the Logitech, AXA, IMC and Scholé challenges.
   - **reading (5):** clapping syllables, sound buttons, spelling letter by letter, plurals, fixing a sentence;
   - **science (6):** the unit ladder, speed-distance-time with a car on the road, float or sink, electric circuits, solid-liquid-gas particles, food chains.
 
-  Pick the subject on Home (*Choose a practice*). Every number in an animation is computed by code, never guessed by a model. A small decision model, **Laya**, picks the right animation in about 50 ms.
+  There is nothing to pick: Glim recognises whether what you write is maths, reading or science (the Laya model), and files it there. Every number in an animation is computed by code, never guessed by a model. A small decision model, **Laya**, picks the right animation in about 50 ms.
 - **Fits the student.** Pizzas and cookies for a 6-year-old, bars and grids around 10, clean graphs from 13. The teaching style that works for a child (pictures, bars or a worked example) is remembered.
 - **Point and ask.** Point at an exercise, hold still, and ask out loud ("how do I solve this?"). Whisper hears the question in the browser; the answer is spoken and the solution opens.
 - **Talks naturally.** Kokoro, a natural voice, runs in the browser. It can be turned off, or switched to the system voice.

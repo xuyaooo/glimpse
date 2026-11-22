@@ -260,6 +260,13 @@ function apply(e: EngineEvent) {
       state.sheet = e.sheet ?? null
       state.sheetChecking = false
       break
+    case 'subject':
+      // recognised by the engine: nothing to pick, and nothing to send back
+      if (e.subject !== state.subject) {
+        state.subject = e.subject
+        state.topic = null
+      }
+      break
     case 'answer':
       state.answer = e.answer
       state.asking = false

@@ -50,14 +50,10 @@ export function useWork() {
   /** Practise again: the exercises suggested after each finished session, newest first (every subject). */
   const allReviews = ref<SessionReview[]>([])
   /**
-   * Maths, Reading and Science are kept apart: the subject shown (the one being practised, or
-   * 'all'). Every record carries its subject; older ones, from before there were subjects, are maths.
+   * Maths, Reading and Science are kept apart: the subject shown ('all' by default). Every record
+   * carries the subject Glim recognised for it; older ones, from before there were subjects, are maths.
    */
-  const subject = ref<string>(state.subject)
-  watch(
-    () => state.subject,
-    (v) => (subject.value = v),
-  )
+  const subject = ref<string>('all')
   const subjectOf = (r: { data?: Record<string, unknown> }) => String(r.data?.subject ?? 'maths')
   const shown = computed(() => (subject.value === 'all' ? records.value : records.value.filter((r) => subjectOf(r) === subject.value)))
   const reviews = computed(() => (subject.value === 'all' ? allReviews.value : allReviews.value.filter((r) => (r.subject ?? 'maths') === subject.value)))

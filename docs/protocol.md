@@ -11,7 +11,7 @@ Maths travels as LaTeX: `\frac{3}{4}+\frac{1}{2}=\frac{4}{6}`. Fractions are nev
 | type | fields | when |
 |---|---|---|
 | `session_start` | `student`, `name`, `lang`, `subject` | a child is picked. `subject`: `maths`, `reading` or `science` |
-| `subject` | `subject` | the child picked another subject under *Choose a practice*; check that subject from now on |
+| `subject` | `subject` | set the subject by hand (the app no longer sends it: the engine recognises the subject and sends a `subject` event) |
 | `cut_part` | `image?` | "this line is finished, read it now": the browser saw the pencil lift (or a key / button was pressed). `image` is a JPEG data URL of the whole camera frame, already the right way up. **The browser owns the camera** (`getUserMedia`); the engine never opens it |
 | `part_typed` | `text` | development: type a part (`"3/4 + 1/2 = 4/6"`) instead of writing it |
 | `confirm_reply` | `partId`, `ok` | the child answered "Did you write this?" |

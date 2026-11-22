@@ -47,4 +47,14 @@ LEVEL = {
     "instructions": "How advanced is this maths?",
     "criteria": ["early primary school (ages 5 to 8)", "primary school (ages 8 to 11)", "secondary school (ages 11 to 16)", "university or advanced (16 and over)"],
 }
-QUESTIONS = {"animation": ANIMATION, "level": LEVEL}
+# Which school subject an exercise is from: Glimpse recognises it (no subject to pick)
+SUBJECT = {
+    "type": "choice",
+    "instructions": "Which school subject is this exercise from?",
+    "criteria": {
+        "maths": "numbers and calculations, fractions, equations, geometry, functions, limits, integrals, probability, statistics",
+        "reading": "words and letters, spelling, sounds and syllables, plurals, sentences, grammar, punctuation, vocabulary, questions about a story or a text",
+        "science": "physics, chemistry, biology, earth: units and measures, speed, forces, electricity, light, materials, solids liquids and gases, plants, animals, food chains, the human body",
+    },
+}
+QUESTIONS = {"animation": ANIMATION, "level": LEVEL, "subject": SUBJECT}

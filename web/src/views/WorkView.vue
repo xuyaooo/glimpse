@@ -66,6 +66,8 @@ const counts = Object.fromEntries(tiles.map((t) => [t.key, useCountUp(() => work
 // Practise again: exercises suggested after each finished session (also reached from the summary,
 // as /work#review)
 const route = useRoute()
+// /work?subject=reading (from Home's My work menu): that subject's tab
+if (typeof route.query.subject === 'string' && ['maths', 'reading', 'science', 'all'].includes(route.query.subject)) work.subject.value = route.query.subject
 const toPractise = computed(() => work.reviews.value.reduce((t, r) => t + r.items.filter((i) => !i.done).length, 0))
 function goToReview() {
   document.getElementById('review')?.scrollIntoView({ behavior: 'smooth', block: 'start' })

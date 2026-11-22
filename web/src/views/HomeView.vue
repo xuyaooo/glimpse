@@ -9,9 +9,9 @@ import HomeLandscape from '@/components/HomeLandscape.vue'
 import Mascot from '@/components/Mascot.vue'
 import StatsCard from '@/components/StatsCard.vue'
 import StudentPickerModal from '@/components/StudentPickerModal.vue'
-import SubjectCard from '@/components/SubjectCard.vue'
+import WorkMenuCard from '@/components/WorkMenuCard.vue'
 import TopBar from '@/components/TopBar.vue'
-import { chooseSubject, state } from '@/lib/engine'
+import { state } from '@/lib/engine'
 import { ui } from '@/lib/ui'
 import { useDesk } from '@/lib/useDesk'
 
@@ -61,7 +61,7 @@ function search(v: string) {
                 </svg>
               </div>
             </div>
-            <SubjectCard :current="state.subject" :waiting="state.exercises.length" :ping="ui.practicePing" @pick="chooseSubject" />
+            <WorkMenuCard />
             <AchievementsCard :right="right" :fixed="fixed" :best-run="runs.best" :asked="state.questions.length" />
           </div>
         </div>

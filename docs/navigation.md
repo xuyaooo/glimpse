@@ -16,7 +16,7 @@ Three pages in the sidebar, plus the camera window.
 │ Home    │ Good evening, Amara! 👋                      Alps, pine forests, Glim
 │ My work │ It clicked! Keep going.                       holding a star
 │ Tutor   │ ┌ ring: right today │ right in a row │ points ┐ ▂▄▆█
-│ view    │ └──────────────────────────────────────────────┘   ┌ Choose a practice ─┐
+│ view    │ └──────────────────────────────────────────────┘   ┌ My work ───────────┐
 │         │ ┌ Continue your practice ············ View all → ┐ │ Maths   3 to try  ✓│
 │  Alps   │ │ the paper on the desk   Maths                  │ │ Reading           >│
 │  + flag │ │                         Adding fractions       │ │ Science           >│
@@ -27,7 +27,7 @@ Three pages in the sidebar, plus the camera window.
 ```
 
 - **Continue** (Start before the first line) opens the camera window. With nobody picked yet it asks who's writing first.
-- **Choose a practice**: pick the subject, Maths, Reading or Science. *Continue your practice*, the breadcrumb on My work and the camera window follow it, and the engine is told (`subject`). After a mistake, the current subject shows how many similar exercises are waiting ("3 to try").
+- **My work** (right): the way into My work by subject, Maths, Reading or Science, with how much was done in each. There is no subject to pick: Glim recognises the subject of what is written (Laya) and files it; the subject being worked on shows "now".
 - **Your achievements**: First tick, Fixed it (right after a mistake), 3 in a row, Curious (asked a question). Locked ones are grey with a padlock.
 - **Level** (sidebar): 10 points per right line, a new level every 50.
 - **View all** and the search box go to My work. The bell opens the camera on the next similar exercise.

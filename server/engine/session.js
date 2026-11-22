@@ -502,6 +502,9 @@ async function analyzePage(s, read, frameDataUrl, emit, { whole = false } = {}) 
     return
   }
   // OCR reads top to bottom: the newest line is (usually) the last line with maths in it
+  // the subject of what was just written decides how the page is read and judged
+  const lastWritten = read.lines.findLastIndex((l) => looksWritten(l))
+  await detectSubject(s, read.lines[lastWritten] ?? read.lines[read.lines.length - 1], emit)
   const newest = read.lines.findLastIndex((l) => looksWork(s, l))
   let out
   try {
@@ -965,6 +968,29 @@ const TOPIC = {
 }
 
 // What kind of maths this is (Laya + the parsers), shown as the topic everywhere in the app.
+// Which school subject this is, recognised (there is nothing to pick): Laya's kind and its
+// subject, or its answer to "which subject?"; without Laya, the animation the rules can build.
+// The session follows it (the tutor's words, what counts as work, the records' subject) and the
+// app is told.
+const SUBJECTS = ['maths', 'reading', 'science']
+async function detectSubject(s, text, emit) {
+  if (!text) return s.subject
+  // an exercise the rules can compute says what it is (the dice question is probability: maths)
+  const sc = sceneFor({ exercise: text, age: s.age })
+  let subject = sc ? (SUBJECT_OF[sc.kind] ?? 'maths') : null
+  if (!subject) {
+    const laya = await askLaya('/decide', { text }, 1000)
+    // Laya's subject answer only (its kind alone is no proof: a worded maths problem was taken
+    // for "Electric circuits"); unsure, the subject stays as it is
+    if (laya?.subject && laya.subject_probability >= 0.5) subject = laya.subject
+  }
+  if (subject && SUBJECTS.includes(subject) && subject !== s.subject) {
+    s.subject = subject
+    emit({ type: 'subject', subject })
+  }
+  return s.subject
+}
+
 async function sendTopic(s, exercise, emit) {
   const laya = await askLaya('/decide', { text: exercise }, 1000)
   const sc = sceneFor({ exercise, kind: laya?.kind, age: s.age })
@@ -1380,6 +1406,7 @@ Return:
   if (about) about = closestLine(about, read.lines) ?? about.replace(/^\s*\\?text\{?\s*\d{1,2}[.)]\s*/, '')
   const key = (t) => String(t || '').replace(/\$|\\[()[\]]|\s/g, '').toLowerCase()
   const part = about && s.parts.find((p) => key(p.raw || p.latex) === key(about))
+  if (about) await detectSubject(s, about, emit) // the exercise pointed at: its subject, for its record and its solution
   emit({ type: 'question', question: { text, lang: s.lang, final: true, ...(about ? { about } : {}), ...(part ? { pointedAt: { partId: part.id, token: '' } } : {}) } })
   s.questions.push({ text, lang: s.lang, about, answer: answer.text, at: Date.now() })
   emit({ type: 'answer', answer })
@@ -1418,6 +1445,7 @@ function pointedAt(p) {
 
 async function answerQuestion(s, text, partId, emit, { asked = false } = {}) {
   const p = (partId && s.parts.find((x) => x.id === partId)) || (asked ? partAsked(s, text) : target(s))
+  await detectSubject(s, p ? p.raw || p.latex : text, emit)
   const q = { text, lang: s.lang, final: true, pointedAt: pointedAt(p) }
   emit({ type: 'question', question: q })
   emit({ type: 'status', state: 'answering' })

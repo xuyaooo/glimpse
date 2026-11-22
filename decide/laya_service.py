@@ -25,11 +25,16 @@ import numpy as np
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 from examples import KINDS, generate  # noqa: E402
+from examples_domains import READING_KINDS, SCIENCE_KINDS  # noqa: E402
+from subjects import SUBJECT_EXAMPLES  # noqa: E402
 from questions import QUESTIONS  # noqa: E402
 
 PORT = int(os.environ.get("DECIDE_PORT", "8091"))
 LEARNED = os.path.join(HERE, "learned.jsonl")
 K = 9
+SUBJECTS = ["maths", "reading", "science"]
+# each animation kind belongs to a subject ("none" to none: its subject comes from Laya's answer)
+SUBJECT_OF = {**{k: "maths" for k in KINDS if k != "none"}, **{k: "reading" for k in READING_KINDS}, **{k: "science" for k in SCIENCE_KINDS}}
 ABSTAIN_BELOW = 0.2
 SHARPNESS = 160  # how strongly the closest kind wins
 MATCH_FLOOR = 0.86  # below this similarity to its closest examples, the winning kind is only the least unlike one
@@ -119,6 +124,7 @@ class Decider:
         self.texts = [words(t) for t, _ in rows]
         self.labels = np.array([KINDS.index(k) for _, k in rows])
         self.bank = self._unit(self.embed(self.texts))
+        self._subjects()
         self.decide("3 + 4 =")  # warm up
         print(f"[decide] Laya ready on {self.agent.device} in {time.time() - t:.1f}s, {len(rows)} examples", flush=True)
 
@@ -132,11 +138,13 @@ class Decider:
         w = words(text)
         if nothing_to_decide(w):
             return {"kind": "none", "probability": 0.0, "abstained": True, "alternatives": [], "laya": None, "nearest": None,
-                    "ms": round((time.time() - t) * 1000)}
+                    "subject": None, "subject_probability": 0.0, "ms": round((time.time() - t) * 1000)}
         with self.lock:
             q = self._unit(self.embed([w]))[0]
-            typed = self.agent.predict(w, {"animation": QUESTIONS["animation"]})["answers"]["animation"]
+            answers = self.agent.predict(w, {"animation": QUESTIONS["animation"], "subject": QUESTIONS["subject"]})["answers"]
+            typed = answers["animation"]
             bank, labels, texts = self.bank, self.labels, self.texts  # one consistent view, even while learn() adds
+            subj_bank, subj_labels = self._subjects()
         sims = bank @ q
         top = np.argsort(-sims)[:K]
         # each kind competes with its best matches (mean of its 3 closest examples), so a kind
@@ -160,6 +168,7 @@ class Decider:
         order = np.argsort(-p)
         choice = KINDS[order[0]]
         abstained = p[order[0]] < ABSTAIN_BELOW or best[order[0]] < MATCH_FLOOR
+        subject, subject_p = self._subject(q, answers.get("subject") or {}, subj_bank, subj_labels)
         return {
             "kind": "none" if abstained else choice,
             "probability": round(float(p[order[0]]), 3),
@@ -167,8 +176,46 @@ class Decider:
             "alternatives": [{"kind": KINDS[i], "probability": round(float(p[i]), 3)} for i in order[1:3]],
             "laya": typed.get("choice"),
             "nearest": texts[top[0]],
+            "subject": subject,
+            "subject_probability": subject_p,
             "ms": round((time.time() - t) * 1000),
         }
+
+    def _subjects(self):
+        """The examples the subject vote uses (built once): every example with a kind (its subject)
+        and the subject examples for the lines no animation explains (decide/subjects.py)."""
+        if getattr(self, "subj_bank", None) is None:
+            keep = [i for i, k in enumerate(self.labels) if KINDS[k] in SUBJECT_OF]
+            extra = [(words(t), sub) for sub, ts in SUBJECT_EXAMPLES.items() for t in ts]
+            try:
+                extra_vecs = self._unit(self.embed([t for t, _ in extra]))
+            except Exception:  # the subject examples are a help, not a need: the kinds' examples still vote
+                extra, extra_vecs = [], np.zeros((0, self.bank.shape[1]), dtype=np.float32)
+            self.subj_labels = np.array([SUBJECTS.index(SUBJECT_OF[KINDS[self.labels[i]]]) for i in keep] + [SUBJECTS.index(sub) for _, sub in extra], dtype=int)
+            self.subj_bank = np.vstack([self.bank[keep], extra_vecs])
+        return self.subj_bank, self.subj_labels
+
+    @staticmethod
+    def _subject(q, typed, subj_bank, subj_labels):
+        """The school subject: the closest examples vote (each subject with the mean of its 3 best,
+        over the animation examples and the subject examples), mixed with Laya's own answer to
+        "which school subject?"."""
+        sims = subj_bank @ q
+        best = np.array([np.sort(sims[subj_labels == i])[-3:].mean() if (subj_labels == i).any() else -1.0 for i in range(len(SUBJECTS))])
+        knn = np.exp((best - best.max()) * SHARPNESS)
+        knn /= knn.sum()
+        lay = np.zeros(len(SUBJECTS))
+        probs = typed.get("probabilities") or typed.get("probs")
+        if isinstance(probs, dict):
+            for k, v in probs.items():
+                if k in SUBJECTS:
+                    lay[SUBJECTS.index(k)] = v
+        elif typed.get("choice") in SUBJECTS:
+            lay[SUBJECTS.index(typed["choice"])] = 1.0
+        lay = lay / lay.sum() if lay.sum() else np.full(len(SUBJECTS), 1 / len(SUBJECTS))
+        mix = 0.75 * knn + 0.25 * lay
+        i = int(np.argmax(mix))
+        return SUBJECTS[i], round(float(mix[i]), 3)
 
     def learn(self, text, kind):
         if kind not in KINDS:

@@ -224,6 +224,8 @@ export type EngineEvent =
   | { type: 'topic'; topic: { kind: string; label: string } }
   /** "Check my whole sheet": every exercise on the page, counted (null if it couldn't be read). */
   | { type: 'sheet'; sheet: SheetReport | null; error?: boolean }
+  /** The subject Glim recognised (Laya) for what was just written or asked: maths, reading or science. */
+  | { type: 'subject'; subject: SubjectId }
 
 export type ClientEvent =
   | { type: 'session_start'; student: string; name: string; lang: string; subject: SubjectId; age?: number }

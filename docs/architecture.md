@@ -20,9 +20,14 @@ engine (server/, Node + Express) ── a local server on :3001, or one Vercel F
   llm.js       the models: Ollama on this computer, or any OpenAI-compatible API (OpenRouter...), per role
 ```
 
-## Subjects
+## Subjects, recognised
 
-The student picks Maths, Reading or Science on Home (*Choose a practice*), and the engine is told (`subject`). The same loop works for all three. The tutor's prompts follow the subject: hints about spelling and punctuation in reading, units and facts in science. Any written line counts as work, not only lines with maths. In Reading, a misspelt word gets its animation once the tutor has given the right spelling, so a misspelling is never taught as the answer.
+There is no subject to pick. Before a page is judged or a question answered, the engine works out the subject of what was just written or pointed at (`detectSubject` in `session.js`):
+1. an exercise the rules can compute says what it is (the dice question is probability: maths);
+2. otherwise Laya decides: its subject vote (the closest examples, from every animation example plus `decide/subjects.py`) mixed with its own answer to "which school subject?" (`decide/questions.py`);
+3. unsure: the subject stays as it was.
+
+The session follows it: the tutor's prompts (spelling and punctuation in reading, units and facts in science), what counts as work, and the subject saved on every record, so My work and History keep the subjects apart. The app is told with a `subject` event. In Reading, a misspelt word gets its animation once the tutor has given the right spelling, so a misspelling is never taught as the answer.
 
 ## One line, from the pencil to the hint
 
