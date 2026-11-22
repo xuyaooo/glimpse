@@ -8,8 +8,6 @@
 
 It runs on your own computer with free, open models, or with cloud models through OpenRouter.
 
-LauzHack 2026, for the Logitech, AXA, IMC and Scholé challenges.
-
 ![Glimpse Home: today's progress, continue your practice and My work by subject](docs/screenshots/hero.png)
 
 - [What it does](#what-it-does)
