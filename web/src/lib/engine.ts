@@ -6,6 +6,8 @@ import { createDemo } from './demo'
 import { settings } from './settings'
 import { students, type Student } from './mock'
 import type { SubjectId } from './subjects'
+import { localSheetReport } from './sheet'
+import type { SheetReport } from './types'
 import type {
   Answer,
   ClientEvent,
@@ -71,6 +73,9 @@ export const state = reactive({
   ended: false,
   /** What kind of maths the child is doing, as recognised (null: nothing read yet). */
   topic: null as { kind: string; label: string } | null,
+  /** The last "Check my whole sheet" report, and whether one is being made. */
+  sheet: null as SheetReport | null,
+  sheetChecking: false,
 
   /** Loop 2: pointing and asking. */
   asking: false,
@@ -251,6 +256,10 @@ function apply(e: EngineEvent) {
     case 'topic':
       state.topic = e.topic
       break
+    case 'sheet':
+      state.sheet = e.sheet ?? null
+      state.sheetChecking = false
+      break
     case 'answer':
       state.answer = e.answer
       state.asking = false
@@ -359,6 +368,8 @@ function clearSession() {
     summary: null,
     ended: false,
     topic: null,
+    sheet: null,
+    sheetChecking: false,
   })
 }
 
@@ -496,7 +507,25 @@ export function chooseSubject(subject: SubjectId) {
   if (state.student) send({ type: 'subject', subject })
 }
 
-/** "This line is finished": the pencil lifted, a key, the mouse button or the on-screen button. */
+/** "Check my whole sheet": every exercise on the page. The demo counts the lines on screen. */
+export function checkSheet(image?: string) {
+  if (!state.student || state.sheetChecking) return
+  if (state.connection !== 'live') {
+    state.sheet = localSheetReport(state.parts, state.student.name)
+    return
+  }
+  fresh()
+  state.sheet = null
+  state.sheetChecking = true
+  send({ type: 'check_sheet', image })
+}
+
+/** "Show me how" on one exercise of the sheet report: its worked solution and animation. */
+export function explainPart(partId: number) {
+  if (state.connection === 'live' && state.student) send({ type: 'explain', partId })
+}
+
+/** "This line is finished": the "Done writing?" prompt, a key, the mouse button or the on-screen button. */
 export function cutPart(image?: string) {
   if (state.asking || state.confirm || !state.student) return
   fresh()

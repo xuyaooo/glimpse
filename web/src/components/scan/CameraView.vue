@@ -96,7 +96,7 @@ const hint = computed(() => {
   if (!props.parts.length) return 'Put your paper under the camera, then write line 1'
   if (props.status === 'listening') return 'Listening: say your question'
   if (props.tip) return 'Pointing: hold still, then say your question'
-  if (props.autoRead && live.value) return props.moving ? 'Writing…' : 'Lift your pencil when the line is done, or point to ask'
+  if (props.autoRead && live.value) return props.moving ? 'Writing…' : 'Stop writing and Glim asks what to check, or point to ask'
   return 'Press W or “Read my line now” when the line is done'
 })
 </script>

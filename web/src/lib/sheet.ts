@@ -1,61 +1,8 @@
-// "Check my whole sheet". When the student seems to have finished (some new lines, then no
-// pencil movement and no hand on the paper for a while), a prompt offers to check every exercise
-// on the sheet; the engine answers with a report (server/engine/sheet.js).
-import { onBeforeUnmount, onMounted, ref, watch, type Ref } from 'vue'
+// "Check my whole sheet": the engine judges every exercise on the page and answers with a report
+// (server/engine/sheet.js). Without an engine (the demo), the lines on screen are counted here.
 
-export interface SheetItem {
-  n: number
-  partId: number
-  latex: string
-  verdict: 'right' | 'wrong' | 'unfinished' | 'unsure'
-  note: string | null
-}
-export interface SheetReport {
-  total: number
-  right: number
-  wrong: number
-  unfinished: number
-  unsure: number
-  items: SheetItem[]
-  message: string
-  firstToFix: number | null
-  at: number
-}
-
-/** How long the paper must stay still (no pencil, no hand) before the prompt. */
-export const SHEET_IDLE_MS = 8000
-/** New lines read since the last prompt before it is offered (again). */
-export const SHEET_MIN_LINES = 2
-
-export function useSheetPrompt(opts: { moving: Ref<boolean>; handOnPaper: () => boolean; enabled: () => boolean; lines: () => number }) {
-  const show = ref(false)
-  let lastActivity = performance.now()
-  let linesAtLastOffer = opts.lines()
-  let timer = 0
-  watch(opts.moving, (m) => {
-    if (m) {
-      lastActivity = performance.now()
-      show.value = false // writing again: not finished after all
-    }
-  })
-  function tick() {
-    if (!opts.enabled()) {
-      show.value = false
-      return
-    }
-    if (opts.handOnPaper()) lastActivity = performance.now()
-    if (!show.value && opts.lines() - linesAtLastOffer >= SHEET_MIN_LINES && performance.now() - lastActivity >= SHEET_IDLE_MS) show.value = true
-  }
-  /** The prompt was answered (check or not yet): offer again after a few more lines. */
-  function answered() {
-    show.value = false
-    linesAtLastOffer = opts.lines()
-    lastActivity = performance.now()
-  }
-  onMounted(() => (timer = window.setInterval(tick, 500)))
-  onBeforeUnmount(() => window.clearInterval(timer))
-  return { show, answered }
-}
+import type { SheetItem, SheetReport } from './types'
+export type { SheetItem, SheetReport }
 
 /** The report for the demo (no engine): the lines on screen, counted the same way as the engine. */
 export function localSheetReport(parts: { id: number; latex: string; verdict: string; note?: string }[], name?: string): SheetReport {

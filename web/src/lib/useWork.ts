@@ -9,7 +9,7 @@ import type { Scene, SessionReview, SessionSummary, WorkedSteps, WrittenPart } f
 export interface SavedRecord {
   ref: string
   sessionId: string
-  kind: 'line' | 'question' | 'steps' | 'summary'
+  kind: 'line' | 'question' | 'steps' | 'summary' | 'sheet'
   at: number
   data: Record<string, unknown>
 }
@@ -47,8 +47,26 @@ export function useWork() {
   const loading = ref(false)
   const error = ref('')
 
-  /** Practise again: the exercises suggested after each finished session, newest first. */
-  const reviews = ref<SessionReview[]>([])
+  /** Practise again: the exercises suggested after each finished session, newest first (every subject). */
+  const allReviews = ref<SessionReview[]>([])
+  /**
+   * Maths, Reading and Science are kept apart: the subject shown (the one being practised, or
+   * 'all'). Every record carries its subject; older ones, from before there were subjects, are maths.
+   */
+  const subject = ref<string>(state.subject)
+  watch(
+    () => state.subject,
+    (v) => (subject.value = v),
+  )
+  const subjectOf = (r: { data?: Record<string, unknown> }) => String(r.data?.subject ?? 'maths')
+  const shown = computed(() => (subject.value === 'all' ? records.value : records.value.filter((r) => subjectOf(r) === subject.value)))
+  const reviews = computed(() => (subject.value === 'all' ? allReviews.value : allReviews.value.filter((r) => (r.subject ?? 'maths') === subject.value)))
+  /** Lines and questions per subject, for the tabs. */
+  const subjectCounts = computed(() => {
+    const c: Record<string, number> = { maths: 0, reading: 0, science: 0 }
+    for (const r of records.value) if (r.kind === 'line' || r.kind === 'question') c[subjectOf(r)] = (c[subjectOf(r)] ?? 0) + 1
+    return c
+  })
   /** The student whose work has been loaded (null until the first answer). */
   const loadedFor = ref<string | null>(null)
 
@@ -58,7 +76,7 @@ export function useWork() {
     // The scripted demo saves nothing: its Practise again is the summary of the session just finished.
     if (state.connection === 'demo') {
       const s = state.summary
-      reviews.value = s?.review?.length ? [{ ref: `demo-${s.at}`, sessionId: currentSessionId(), at: s.at, title: s.title, items: s.review }] : []
+      allReviews.value = s?.review?.length ? [{ ref: `demo-${s.at}`, sessionId: currentSessionId(), at: s.at, title: s.title, items: s.review, subject: state.subject }] : []
       loadedFor.value = id
       return
     }
@@ -67,7 +85,7 @@ export function useWork() {
       const [r, rv] = await Promise.all([fetch(`/api/history?student=${encodeURIComponent(id)}&limit=500`), fetch(`/api/review?student=${encodeURIComponent(id)}`)])
       if (!r.ok) throw new Error(String(r.status))
       records.value = await r.json()
-      if (rv.ok) reviews.value = await rv.json()
+      if (rv.ok) allReviews.value = await rv.json()
       loadedFor.value = id
       error.value = ''
     } catch {
@@ -79,7 +97,7 @@ export function useWork() {
 
   /** "I did it" on one exercise: shown at once, saved with its session (put back if it couldn't be saved). */
   async function markDone(ref: string, id: string, done: boolean) {
-    const item = reviews.value.find((r) => r.ref === ref)?.items.find((i) => i.id === id)
+    const item = allReviews.value.find((r) => r.ref === ref)?.items.find((i) => i.id === id)
     if (!item) return
     const was = !!item.done
     item.done = done
@@ -100,7 +118,7 @@ export function useWork() {
   watch(() => [state.student?.id, state.connection], load, { immediate: true })
   watch(() => [state.parts.length, state.questions.length, state.summary?.at, state.steps?.at], later)
 
-  const of = (kind: SavedRecord['kind']) => records.value.filter((r) => r.kind === kind)
+  const of = (kind: SavedRecord['kind']) => shown.value.filter((r) => r.kind === kind)
   const solutions = computed(() => of('steps'))
 
   // the worked solution saved for a line (same session, same exercise)
@@ -143,7 +161,7 @@ export function useWork() {
       right: lines.filter((r) => r.data.verdict === 'correct').length,
       questions: of('question').length,
       animations: solutions.value.filter((r) => r.data.scene).length,
-      sessions: new Set(records.value.map((r) => r.sessionId)).size,
+      sessions: new Set(shown.value.map((r) => r.sessionId)).size,
       stars: summaries.value.reduce((t, s) => t + (s.stars || 0), 0),
     }
   })
@@ -182,5 +200,5 @@ export function useWork() {
   })
 
   const latest = computed(() => summaries.value[0] ?? null)
-  return { records, loading, error, load, pastLines, stats, topics, mistakes, latest, summaries, reviews, markDone, loadedFor }
+  return { records, loading, error, load, pastLines, stats, topics, mistakes, latest, summaries, reviews, markDone, loadedFor, subject, subjectCounts }
 }

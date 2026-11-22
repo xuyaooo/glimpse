@@ -81,7 +81,7 @@ const showSticky = computed(() => !!sticky.value && (props.part?.verdict !== 'wr
         <div class="m-auto flex max-w-[320px] flex-col items-center gap-3 text-center">
           <Mascot :size="96" />
           <p class="font-marker text-[30px] font-bold leading-tight text-marker">Your reasoning shows up here</p>
-          <p class="text-[15px] font-semibold text-ink-2">Open the camera, write a line on your paper and lift your pencil.</p>
+          <p class="text-[15px] font-semibold text-ink-2">Open the camera, write a line on your paper and check it.</p>
           <button type="button" class="btn-lagoon mt-1 rounded-2xl px-5 py-3 text-[15px] font-black" @click="emit('openCamera')">Open camera</button>
         </div>
       </template>
@@ -140,7 +140,7 @@ const showSticky = computed(() => !!sticky.value && (props.part?.verdict !== 'wr
       <p class="min-w-0 text-[15px] leading-snug text-ink">
         <b class="text-marker">Tip:</b>{{ ' ' }}
         <template v-if="hint"><span :lang="hint.lang">{{ hint.text }}</span><span v-if="hint.translation" lang="en" class="block text-[13px] text-ink-2">{{ hint.translation }}</span></template>
-        <template v-else>Lift your pencil after each line. Glimpse checks it and explains it here.</template>
+        <template v-else>Check each line when you stop writing. Glimpse explains it here.</template>
       </p>
     </div>
   </section>

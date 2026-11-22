@@ -26,7 +26,7 @@ The student picks Maths, Reading or Science on Home (*Choose a practice*), and t
 
 ## One line, from the pencil to the hint
 
-1. **The pencil lifts.** The camera page notices the pause (or the student presses *Read my line now*, `W`, `C` or `Space`). It sends the whole frame: `{ type: "cut_part", image }`.
+1. **The student chooses to check.** The camera page notices the pencil stop and asks *"Done writing?"*. Nothing is sent until the student presses *Check my line* (or *Read my line now*, `W`, `C`, `Space`), which sends the whole frame: `{ type: "cut_part", image }`. *Check the whole sheet* sends `{ type: "check_sheet", image }`: every line is judged the same way, and the engine answers with one `sheet` report (counts and every exercise, `server/engine/sheet.js`) instead of a hint about the newest line; *Show me how* sends `{ type: "explain", partId }` for one exercise's worked solution.
 2. **The whole photo is read** (`reader.js`). GLM-OCR transcribes it, and the lines are cleaned (LaTeX, OCR slips such as `S` for `∫`). A new sheet of paper is detected, so lines from the old page aren't mixed in. The engine sends `page` (what was read).
 3. **The newest line is judged** (`session.js` → `analyzePage`). The OCR text is the truth about *what* is written. The tutor model sees the photo and the text and says whether each line is right, not yet, unfinished or printed. Exact maths (fractions, sums) overrides the model when it can decide. The engine sends `part` events (verdicts) and a `hint`.
 4. **It was wrong or unfinished**, so the full solution is prepared. Laya and the rules pick an **animation** (`scenes.js`), which is sent first and offered on the camera as a video. The tutor's **worked steps** follow (`steps`). Integrals and derivatives get a numerically checked antiderivative or derivative. When the tutor's result and the animation's disagree, the animation is dropped.
@@ -51,7 +51,7 @@ It also writes the [exercises to practise again](practise-again.md). The tutor m
 | Table | What |
 |---|---|
 | `glimpse_sessions` | each session's state (JSON): lines, verdicts, misconceptions, the teaching style that works, topics, age |
-| `glimpse_history` | one record per thing that happened: `line`, `question`, `steps`, `summary` (with `review`), by student and session |
+| `glimpse_history` | one record per thing that happened: `line`, `question`, `steps`, `summary` (with `review`), `sheet`, by student and session; each record's data carries its `subject` (maths, reading, science), so My work and History keep the subjects apart |
 
 Locally it's PGlite in `data/pglite` (a real Postgres in a folder). On Vercel it's Neon (`DATABASE_URL`). There are no accounts: see "No login" in the [README](../README.md).
 

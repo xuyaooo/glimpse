@@ -23,7 +23,7 @@ LauzHack 2026, for the Logitech, AXA, IMC and Scholé challenges.
 
 ## What it does
 
-- **Reads the paper.** When the pencil lifts, the whole camera photo is read (GLM-OCR) and the newest line is checked. You see what was read, typeset, with right / not yet / unfinished and why.
+- **Reads the paper, when you choose.** When you stop writing, Glim asks **"Done writing?"**: **Check my line** reads the whole camera photo (GLM-OCR) and checks the line you just wrote; **Check the whole sheet** judges every exercise on the page and reports how many are right, how many to fix and how many aren't finished, with *Show me how* for each one. Nothing is read by itself.
 - **Teaches, not just marks.** A concrete hint for the next step. When a line is wrong or unfinished, the full solution is prepared step by step, together with one of **36 animations**:
   - **maths (25):** from counting apples and fraction pizzas to balances, parabolas, limits, integrals and probability trees;
   - **reading (5):** clapping syllables, sound buttons, spelling letter by letter, plurals, fixing a sentence;
@@ -33,7 +33,7 @@ LauzHack 2026, for the Logitech, AXA, IMC and Scholé challenges.
 - **Fits the student.** Pizzas and cookies for a 6-year-old, bars and grids around 10, clean graphs from 13. The teaching style that works for a child (pictures, bars or a worked example) is remembered.
 - **Point and ask.** Point at an exercise, hold still, and ask out loud ("how do I solve this?"). Whisper hears the question in the browser; the answer is spoken and the solution opens.
 - **Talks naturally.** Kokoro, a natural voice, runs in the browser. It can be turned off, or switched to the system voice.
-- **Remembers.** *My work* keeps every line (with its photo), question, solution and animation, the topics practised and the mistakes to watch out for. Every session ends with a summary and **Practise again**: 3 to 5 exercises like the day's, with answers worked out by code.
+- **Remembers, subject by subject.** *My work* and *History* keep every line (with its photo), question, solution and animation, the topics practised and the mistakes to watch out for, with tabs for **Maths · Reading · Science · All**. Every session ends with a summary and **Practise again**: 3 to 5 exercises like the day's, with answers worked out by code.
 - **For grown-ups.** A tutor view per student: what was practised, what's solid, what needs work, which teaching works.
 
 | Home | My work and Practise again | An animation, full screen |
@@ -124,11 +124,13 @@ On the first visit, allow the camera and the microphone. The natural voice and W
 ## How to use it
 
 1. **Pick your name** (Amara, Luca, Selin, Noor) and press **Continue** to open the camera. The camera should look down at the sheet of paper. *Print the sheet* gives a worksheet whose lines sit where the camera expects them, but any paper works.
-2. **Write one line**, for example `3x + 5 = 20` or `3/4 + 1/8 = 4/12`, then **lift your pencil**. Or press *Read my line now* (keys `W`, `C` or `Space`). On the right: what Glim read, whether it's right, and a hint.
+2. **Write one line**, for example `3x + 5 = 20` or `3/4 + 1/8 = 4/12`, and stop writing: Glim asks **"Done writing?"**. Press **Check my line** (or *Read my line now*, keys `W`, `C` or `Space`). On the right: what Glim read, whether it's right, and a hint.
+   - Finished several exercises? **Check the whole sheet** (in the popup or the bottom bar): every exercise judged, with the counts of right / to fix / not finished and *Show me how* for each one to fix.
+   - The switch *Ask to scan when I stop writing* turns the popup off: then you check with the buttons.
 3. **Watch the solution.** When a line is wrong or unfinished, an animation is offered on the camera. Press play: Glim tells each step and the solution on the right lights up with it. Use pause, next and previous, or *Watch it big* to see it full screen next to the written steps. It never starts by itself.
 4. **Point and ask.** Point at an exercise with your finger, hold still for a second, and ask your question out loud. You can also hold `A`, or type in the box under the camera.
 5. **Finish.** The summary: stars, what you practised, mistakes to watch out for with a tip, and **To practise next time**.
-6. **My work** (sidebar):
+6. **My work** (sidebar), with tabs to keep **Maths, Reading and Science** apart:
    - every line you ever wrote, with its photo, its animation and why it's right or not;
    - your progress and topics;
    - **Practise again**: per session, try each exercise on paper, then *Show the answer*, *Watch how* and *I did it*.

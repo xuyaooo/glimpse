@@ -7,6 +7,7 @@ import AppShell from '@/components/AppShell.vue'
 import HistoryList from '@/components/HistoryList.vue'
 import InsightTabs from '@/components/InsightTabs.vue'
 import ReviewSection from '@/components/ReviewSection.vue'
+import SubjectTabs from '@/components/SubjectTabs.vue'
 import StudentPickerModal from '@/components/StudentPickerModal.vue'
 import TopBar from '@/components/TopBar.vue'
 import Whiteboard from '@/components/Whiteboard.vue'
@@ -43,7 +44,9 @@ const pastShown = computed(() => {
   const q = query.value
   return q ? work.pastLines.value.filter((p) => searchKey(p.latex).includes(q)) : work.pastLines.value
 })
-const allParts = computed(() => [...[...pastShown.value].reverse(), ...shownParts.value])
+// the lines of the session going on belong to the subject being practised
+const liveShown = computed(() => (work.subject.value === 'all' || work.subject.value === state.subject ? shownParts.value : []))
+const allParts = computed(() => [...[...pastShown.value].reverse(), ...liveShown.value])
 const meta = computed(() =>
   Object.fromEntries(
     work.pastLines.value.map((p) => [p.id, { when: new Date(p.at).toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' }), photo: p.photo, animated: !!p.solution?.scene }]),
@@ -144,6 +147,8 @@ const learned = computed(() => {
             </button>
           </div>
         </div>
+        <!-- each subject's work kept apart -->
+        <SubjectTabs v-model="work.subject.value" :counts="work.subjectCounts.value" />
         <!-- progress, from everything saved -->
         <div v-if="work.stats.value.exercises || work.stats.value.questions" class="grid grid-cols-3 gap-2 sm:grid-cols-6" aria-label="Your progress">
           <div v-for="(t, i) in tiles" :key="t.key" class="rounded-2xl px-3 py-2.5 text-center" :class="t.bg" :style="{ animation: `rise 450ms ${i * 0.06}s both` }">

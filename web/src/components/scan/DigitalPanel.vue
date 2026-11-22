@@ -51,7 +51,7 @@ const BADGE = { correct: 'bg-right-mark', wrong: 'bg-wrong-mark', reading: 'bg-l
 
       <div v-if="!selected" class="mt-3 flex flex-col items-center gap-2 rounded-2xl border-2 border-dashed border-line px-4 py-8 text-center">
         <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#14A096" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="animation: bob 1.6s ease-in-out infinite alternate"><path d="M16.9 3.3a2 2 0 0 1 2.8 0l1 1a2 2 0 0 1 0 2.8L9.4 18.4 4 20l1.6-5.4z" /></svg>
-        <p class="text-[15px] font-bold text-ink-2">Write a line on your paper. When you lift your pencil, the camera’s picture and what I read appear here.</p>
+        <p class="text-[15px] font-bold text-ink-2">Write a line on your paper, then check it (Glim asks when you stop writing). The camera’s picture and what I read appear here.</p>
       </div>
 
       <div v-else class="mt-3 flex flex-col gap-3">
@@ -169,7 +169,7 @@ const BADGE = { correct: 'bg-right-mark', wrong: 'bg-wrong-mark', reading: 'bg-l
     <!-- 4. Similar exercises -->
     <section v-if="state.exercises.length" aria-label="Try a similar one" class="flex flex-col gap-2.5 rounded-[24px] bg-white p-5 shadow-[0_14px_30px_-22px_rgb(24_41_74/0.5)]">
       <h3 class="text-lg font-black">Try a similar one</h3>
-      <p class="-mt-1.5 text-[14px] font-semibold text-ink-2">Write it on the next line, then lift your pencil.</p>
+      <p class="-mt-1.5 text-[14px] font-semibold text-ink-2">Write it on the next line, then check it.</p>
       <div class="flex flex-wrap gap-2">
         <button
           v-for="e in state.exercises"

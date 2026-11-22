@@ -20,7 +20,7 @@ const defaults = {
   naturalVoice: 'af_heart' as string,
   /** 0.8 slower ... 1.2 faster */
   rate: 1,
-  /** Read a line by itself when the pencil lifts (the switch on the camera page). */
+  /** Ask "Done writing?" when the pencil stops (the switch on the camera page); nothing is read by itself. */
   readOnLift: true,
   /** After pointing, the microphone listens for the question. */
   listenAfterPointing: true,

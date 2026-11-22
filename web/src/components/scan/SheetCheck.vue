@@ -1,15 +1,16 @@
 <script setup lang="ts">
-// "Check my whole sheet": the prompt when the student seems to have finished, the waiting state,
-// and the report (every exercise, right / to fix / not finished, and how to fix each).
+// "Done writing?": when the student stops writing, nothing is read by itself; this asks what to
+// check (the line just written, or the whole sheet). Then the whole-sheet report: every exercise,
+// right / to fix / not finished, and how to fix each.
 import { computed, onBeforeUnmount, onMounted } from 'vue'
 import FocusTrap from '../FocusTrap.vue'
 import MathTex from '../MathTex.vue'
 import Mascot from '../Mascot.vue'
 import { titleTex } from '@/lib/latex'
-import type { SheetItem, SheetReport } from '@/lib/sheet'
+import type { SheetItem, SheetReport } from '@/lib/types'
 
 const props = defineProps<{ prompt: boolean; checking: boolean; report: SheetReport | null; open: boolean }>()
-const emit = defineEmits<{ check: []; later: []; close: []; explain: [partId: number] }>()
+const emit = defineEmits<{ line: []; check: []; later: []; close: []; explain: [partId: number] }>()
 
 const BADGE: Record<SheetItem['verdict'], { label: string; cls: string; icon: string }> = {
   right: { label: 'Right', cls: 'bg-right-bg text-[#136e43]', icon: '✓' },
@@ -30,16 +31,19 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey, true))
 </script>
 
 <template>
-  <!-- the prompt, over the camera, when the paper has been still for a while -->
+  <!-- "Done writing?": the pencil stopped; nothing is read until the student chooses -->
   <Transition name="fade">
-    <div v-if="prompt && !open && !checking" role="dialog" aria-label="Check the whole sheet" class="pointer-events-auto absolute inset-x-0 bottom-4 z-30 mx-auto flex w-[min(92%,520px)] items-center gap-3 rounded-[22px] bg-white/95 p-3 shadow-2xl ring-1 ring-line backdrop-blur" style="animation: rise 450ms cubic-bezier(0.2, 0.9, 0.3, 1.2) both">
-      <Mascot :size="48" class="shrink-0" />
-      <div class="min-w-0 flex-1">
-        <p class="text-[15px] font-black leading-tight">Finished your sheet?</p>
-        <p class="text-[13px] font-semibold text-ink-2">Glim can check every exercise on it.</p>
+    <div v-if="prompt && !open && !checking" role="dialog" aria-label="Done writing?" class="fixed inset-x-0 bottom-24 z-40 mx-auto flex w-[min(94%,600px)] flex-wrap items-center gap-3 rounded-[22px] bg-white/95 p-3 shadow-2xl ring-1 ring-line backdrop-blur" style="animation: rise 450ms cubic-bezier(0.2, 0.9, 0.3, 1.2) both">
+      <Mascot :size="44" class="shrink-0" />
+      <div class="min-w-[150px] flex-1">
+        <p class="text-[15px] font-black leading-tight">Done writing?</p>
+        <p class="text-[13px] font-semibold text-ink-2">Check the line you just wrote, or every exercise on the sheet.</p>
       </div>
-      <button type="button" class="btn-lagoon min-h-10 shrink-0 rounded-xl px-3.5 text-[14px] font-black" @click="emit('check')">Check my sheet</button>
-      <button type="button" class="min-h-10 shrink-0 rounded-xl px-2.5 text-[13px] font-bold text-ink-2 hover:bg-line-2" @click="emit('later')">Not yet</button>
+      <div class="flex flex-wrap gap-2">
+        <button type="button" class="btn-lagoon min-h-10 rounded-xl px-3.5 text-[14px] font-black" @click="emit('line')">Check my line</button>
+        <button type="button" class="min-h-10 rounded-xl border-2 border-lagoon-soft bg-white px-3 text-[14px] font-black text-lagoon-deep hover:bg-lagoon-mist" @click="emit('check')">Check the whole sheet</button>
+        <button type="button" class="min-h-10 rounded-xl px-2.5 text-[13px] font-bold text-ink-2 hover:bg-line-2" @click="emit('later')">Not yet</button>
+      </div>
     </div>
   </Transition>
 

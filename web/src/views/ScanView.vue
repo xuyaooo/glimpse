@@ -11,10 +11,11 @@ import { computed, onBeforeUnmount, onMounted, ref, toRaw, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import Mascot from '@/components/Mascot.vue'
 import CameraView from '@/components/scan/CameraView.vue'
+import SheetCheck from '@/components/scan/SheetCheck.vue'
 import DigitalPanel from '@/components/scan/DigitalPanel.vue'
 import { log } from '@/lib/activity'
 import { grab, useCamera } from '@/lib/camera'
-import { askEnd, askStart, beginListening, cutPart, endSession, pointAt, setDraftQuestion, startSession, state, topicLabel } from '@/lib/engine'
+import { askEnd, askStart, beginListening, checkSheet, cutPart, endSession, explainPart, pointAt, setDraftQuestion, startSession, state, topicLabel } from '@/lib/engine'
 import { canListen, preloadListener, startListening } from '@/lib/listen'
 import { warmUpListening } from '@/lib/warmup'
 import { close as closePlayer, offer, player as anim } from '@/lib/player'
@@ -35,8 +36,9 @@ const cam = useCamera()
 const video = ref<HTMLVideoElement | null>(null)
 const paper = ref('paper' in route.query)
 const rotated = ref(false)
-// "Read when I lift my pencil": saved in Settings, so it stays as the child left it. The
-// scripted demo stays manual, so a stray hand movement can't skip ahead.
+// "Ask to scan when I stop writing": saved in Settings, so it stays as the child left it. Nothing
+// is read by itself: when the pencil stops, "Done writing?" offers to check the line or the whole
+// sheet. The scripted demo stays manual, so a stray hand movement can't skip ahead.
 const autoRead = computed({
   get: () => settings.readOnLift && state.connection === 'live',
   set: (v: boolean) => (settings.readOnLift = v),
@@ -189,9 +191,53 @@ const { moving } = usePencilLift(
     !state.confirm &&
     !hands.busy() &&
     !anim.playing &&
-    !ui.summaryOpen,
-  capture,
+    !ui.summaryOpen &&
+    !sheetOpen.value,
+  offerScan,
 )
+
+// ------------------------------------------------------------------ "Done writing?" and the whole sheet
+
+const scanPrompt = ref(false)
+const sheetOpen = ref(false)
+let promptTimer = 0
+/** The pencil stopped: ask, don't read (it goes away if writing starts again, or by itself). */
+function offerScan() {
+  scanPrompt.value = true
+  window.clearTimeout(promptTimer)
+  promptTimer = window.setTimeout(() => (scanPrompt.value = false), 25000)
+}
+watch(moving, (m) => m && (scanPrompt.value = false))
+function closePrompt() {
+  scanPrompt.value = false
+  window.clearTimeout(promptTimer)
+}
+function checkLine() {
+  closePrompt()
+  capture()
+}
+function checkWholeSheet() {
+  closePrompt()
+  if (!state.student || state.asking || ui.summaryOpen || state.status === 'reading' || state.status === 'thinking') return
+  resume()
+  flash.value++
+  sheetOpen.value = true
+  const v = video.value
+  checkSheet(live.value && state.connection === 'live' && v?.videoWidth ? (grab(v, null, rotated.value) ?? undefined) : undefined)
+}
+// the report couldn't be made (the reader or the tutor failed): Glim's message says so
+watch(
+  () => state.sheetChecking,
+  (now, before) => before && !now && !state.sheet && (sheetOpen.value = false),
+)
+function explain(partId: number) {
+  sheetOpen.value = false
+  ui.selectedPartId = partId
+  explainPart(partId)
+}
+onBeforeUnmount(() => window.clearTimeout(promptTimer))
+// development only: open the prompt without moving a pencil (browser tests)
+if (import.meta.env.DEV) (window as unknown as { __glimpseScan?: object }).__glimpseScan = { offerScan, checkWholeSheet }
 useManualTriggers({ cut: capture, askStart: onAskStart, askEnd: onAskEnd })
 
 // ------------------------------------------------------------------ reacting to the engine
@@ -366,7 +412,7 @@ const STATUS: Record<string, string> = {
               {{ subject.name }}, {{ topicLabel(subject.topic).toLowerCase() }}
             </span>
           </h1>
-          <p class="text-[14px] font-semibold text-ink-2">{{ state.student?.name }}, write a line, then lift your pencil.</p>
+          <p class="text-[14px] font-semibold text-ink-2">{{ state.student?.name }}, write on your paper, then check your line or the whole sheet.</p>
         </div>
       </div>
 
@@ -390,7 +436,7 @@ const STATUS: Record<string, string> = {
           <span class="relative block h-6 w-11 shrink-0 rounded-full transition-colors duration-300" :class="autoRead ? 'bg-lagoon' : 'bg-line'" aria-hidden="true">
             <span class="absolute left-0.5 top-0.5 block size-5 rounded-full bg-white shadow-md transition-transform duration-300 ease-[cubic-bezier(0.3,1.5,0.5,1)]" :class="autoRead ? 'translate-x-5' : 'translate-x-0'" />
           </span>
-          Read when I lift my pencil
+          Ask to scan when I stop writing
           <span v-if="autoRead && live" class="size-2 rounded-full transition-colors" :class="moving ? 'bg-tangerine' : 'bg-right-mark'" :title="moving ? 'Writing' : 'Still'" />
         </button>
         <button type="button" :aria-pressed="rotated" :disabled="!live" title="Turn the picture upside down" aria-label="Turn the picture upside down" class="flex size-10 items-center justify-center rounded-full bg-white shadow-sm transition-transform hover:rotate-180 disabled:opacity-50" :class="rotated ? 'text-lagoon ring-2 ring-lagoon' : ''" @click="rotated = !rotated">
@@ -468,6 +514,7 @@ const STATUS: Record<string, string> = {
       <div class="ml-auto flex flex-wrap gap-2">
         <button v-if="state.parts.length || state.questions.length" type="button" class="min-h-11 rounded-xl border-2 border-line bg-white px-4 text-[14px] font-black transition-transform hover:-translate-y-0.5" title="End the session and see how it went" @click="finish">Finish</button>
         <button type="button" class="btn-lagoon min-h-11 rounded-xl px-4 text-[14px] font-black transition-transform hover:-translate-y-0.5 active:scale-95" @click="capture">Read my line now</button>
+        <button type="button" class="min-h-11 rounded-xl border-2 border-lagoon-soft bg-white px-4 text-[14px] font-black text-lagoon-deep transition-transform hover:-translate-y-0.5 hover:bg-lagoon-mist active:scale-95" title="Glim checks every exercise on the sheet" @click="checkWholeSheet">Check my whole sheet</button>
         <form v-if="realEngine" class="flex min-h-11 items-center gap-1 rounded-xl border-2 border-line bg-white pl-3 pr-1" @submit.prevent="ask(hands.recentTip())">
           <label for="question" class="sr-only">Your question</label>
           <input id="question" v-model="questionText" type="text" autocomplete="off" placeholder="Your question (optional), then point" class="w-[230px] bg-transparent text-[14px] font-semibold outline-none" />
@@ -497,5 +544,8 @@ const STATUS: Record<string, string> = {
         >{{ state.status === 'answering' ? 'Thinking…' : state.asking ? 'Listening, let go to send' : 'Hold to ask' }}</button>
       </div>
     </footer>
+
+    <!-- "Done writing?" and the whole-sheet report -->
+    <SheetCheck :prompt="scanPrompt" :checking="state.sheetChecking" :report="state.sheet" :open="sheetOpen" @line="checkLine" @check="checkWholeSheet" @later="closePrompt" @close="sheetOpen = false" @explain="explain" />
   </div>
 </template>

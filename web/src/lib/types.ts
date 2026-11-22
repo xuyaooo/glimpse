@@ -93,6 +93,29 @@ export interface SessionReview {
   at: number
   title: string
   items: ReviewItem[]
+  /** maths, reading or science */
+  subject?: string
+}
+
+/** One exercise in the whole-sheet report. */
+export interface SheetItem {
+  n: number
+  partId: number
+  latex: string
+  verdict: 'right' | 'wrong' | 'unfinished' | 'unsure'
+  note: string | null
+}
+/** "Check my whole sheet": every exercise on the page, judged and counted (server/engine/sheet.js). */
+export interface SheetReport {
+  total: number
+  right: number
+  wrong: number
+  unfinished: number
+  unsure: number
+  items: SheetItem[]
+  message: string
+  firstToFix: number | null
+  at: number
 }
 
 /** A whole solution, worked out by the tutor: what each step does, and the line written. */
@@ -199,6 +222,8 @@ export type EngineEvent =
   | { type: 'summary'; summary: SessionSummary }
   /** What kind of maths is on the paper (recognised by Laya), e.g. { kind: 'area', label: 'Integrals' }. */
   | { type: 'topic'; topic: { kind: string; label: string } }
+  /** "Check my whole sheet": every exercise on the page, counted (null if it couldn't be read). */
+  | { type: 'sheet'; sheet: SheetReport | null; error?: boolean }
 
 export type ClientEvent =
   | { type: 'session_start'; student: string; name: string; lang: string; subject: SubjectId; age?: number }
@@ -210,6 +235,10 @@ export type ClientEvent =
    * the whole frame, already the right way up.
    */
   | { type: 'cut_part'; image?: string }
+  /** "Check my whole sheet": the whole frame; the engine judges every exercise on it. */
+  | { type: 'check_sheet'; image?: string }
+  /** "Show me how" on one exercise of the sheet report. */
+  | { type: 'explain'; partId: number }
   /** Development: type a part instead of writing it. */
   | { type: 'part_typed'; text: string }
   | { type: 'confirm_reply'; partId: number; ok: boolean }

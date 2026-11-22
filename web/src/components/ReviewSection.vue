@@ -126,7 +126,7 @@ function watchIt(item: ReviewItem, i: number) {
           <div v-if="open.has(item.id)" class="flex flex-wrap items-center gap-2 rounded-2xl bg-right-bg px-3 py-2" style="animation: pop 400ms cubic-bezier(0.3, 1.6, 0.5, 1) both">
             <span class="text-[13px] font-black text-[#136e43]">Answer</span>
             <MathTex v-if="item.answer" :latex="item.answer" class="text-[22px]" />
-            <span v-else class="text-[13px] font-bold text-ink-2">Write it on paper and lift your pencil: Glim will check it.</span>
+            <span v-else class="text-[13px] font-bold text-ink-2">Write it on paper and check it with the camera.</span>
           </div>
 
           <div class="mt-auto flex flex-wrap gap-2">
@@ -152,7 +152,7 @@ function watchIt(item: ReviewItem, i: number) {
       </TransitionGroup>
 
       <div v-if="session.items.length" class="flex flex-wrap items-center gap-3 rounded-2xl bg-lagoon-mist px-4 py-3">
-        <p class="min-w-0 flex-1 text-[14px] font-bold text-lagoon-deep">Want Glim to check your work? Write the exercise under the camera and lift your pencil.</p>
+        <p class="min-w-0 flex-1 text-[14px] font-bold text-lagoon-deep">Want Glim to check your work? Write the exercise under the camera and check it.</p>
         <button type="button" class="btn-lagoon min-h-10 rounded-full px-4 text-[14px] font-black" @click="emit('camera')">Open camera</button>
       </div>
     </template>

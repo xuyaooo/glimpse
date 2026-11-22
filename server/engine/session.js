@@ -10,6 +10,7 @@ import { complete } from '../llm.js'
 import { sceneFor, texToPlain, compile, toExpr } from './scenes.js'
 import { REVIEW_VERSION, suggestReview } from './review.js'
 import { DOMAIN_KINDS, SUBJECT_OF } from './domains.js'
+import { sheetReport } from './sheet.js'
 
 export const ENGINE_VERSION = 'hackathon-engine-1'
 
@@ -490,10 +491,14 @@ function renumber(text, ids) {
   })
 }
 
-async function analyzePage(s, read, frameDataUrl, emit) {
+// whole: "Check my whole sheet": every line is judged as usual, then the sheet is reported as a
+// whole (counts, each exercise) instead of a hint about the newest line and its solution.
+async function analyzePage(s, read, frameDataUrl, emit, { whole = false } = {}) {
   const lang = LANG_NAME[s.lang] ? s.lang : 'en'
+  const emptySheet = () => whole && emit({ type: 'sheet', sheet: sheetReport([], { name: s.name }) })
   if (!read.lines.length) {
     emit({ type: 'hint', hint: say(s, 'no_new_line') })
+    emptySheet()
     return
   }
   // OCR reads top to bottom: the newest line is (usually) the last line with maths in it
@@ -528,6 +533,7 @@ Write maths in the feedback as plain text that can be read aloud (e.g. x², 3/4)
   } catch (err) {
     console.warn('[engine] tutor model:', err.message)
     emit({ type: 'hint', hint: { ...TROUBLE.think } }) // the reason is logged, never sent to the browser
+    if (whole) emit({ type: 'sheet', sheet: null, error: true })
     return
   }
   const judged = Array.isArray(out.json?.lines) ? out.json.lines : []
@@ -539,6 +545,7 @@ Write maths in the feedback as plain text that can be read aloud (e.g. x², 3/4)
   })
   if (!work.length) {
     emit({ type: 'hint', hint: say(s, 'no_new_line') })
+    emptySheet()
     return
   }
   // which sheet, and which of its lines each line read is (new lines get new ids)
@@ -646,6 +653,13 @@ Write maths in the feedback as plain text that can be read aloud (e.g. x², 3/4)
   const fractions = Boolean(parseSum(last.plain || '')) || fractionAttempt(last.plain)
   if (exact && (fractions || modelVerdict !== exact || !said)) said = exact === 'correct' ? rightHint(s, last.plain) : (focus === last && teachHint) || say(s, 'wrong_generic')
   else if (!exact && slips.has(last.id) && modelVerdict !== 'wrong') said = say(s, slips.get(last.id).carried ? 'step_carried' : 'step_slip')
+  // the whole sheet: one report for every exercise on it, said instead of the newest line's hint
+  if (whole) {
+    const sheet = sheetReport(read1.map((x) => x.part), { name: s.name })
+    said = { text: sheet.message, lang: 'en' }
+    emit({ type: 'sheet', sheet })
+    remember(s, { kind: 'sheet', ref: `sheet:${sheet.at}`, data: { ...sheet } })
+  }
   if (said) emit({ type: 'hint', hint: said })
 
   // the history keeps every line read (and its photo); the newest one also keeps what Glim said.
@@ -656,7 +670,7 @@ Write maths in the feedback as plain text that can be read aloud (e.g. x², 3/4)
 
   // the line is unfinished or wrong: work the whole exercise out, step by step (a slip in an
   // equation: the exercise it came from, not the slip)
-  if (target.note === 'not finished yet' || target.verdict === 'wrong') await sendSteps(s, slips.get(target.id)?.exercise ?? (target.raw || target.latex), emit, { image: read.image })
+  if (!whole && (target.note === 'not finished yet' || target.verdict === 'wrong')) await sendSteps(s, slips.get(target.id)?.exercise ?? (target.raw || target.latex), emit, { image: read.image })
 }
 
 // ---------- the whole solution, step by step ----------
@@ -1239,8 +1253,9 @@ function aboutTex(exercise) {
 
 // History: records saved to the database after each event (server/app.js -> store.js).
 // `ref` makes a record replaceable: a line read again updates its record.
+// Every record carries its subject, so Maths, Reading and Science are kept apart in My work.
 function remember(s, { kind, ref, data, at }) {
-  ;(s.history ||= []).push({ kind, ref: `${s.id}:${ref}`, at: Number.isFinite(at) ? at : Date.now(), data })
+  ;(s.history ||= []).push({ kind, ref: `${s.id}:${ref}`, at: Number.isFinite(at) ? at : Date.now(), data: { ...data, subject: s.subject || 'maths' } })
 }
 
 // ---------- pointing: "what about this?" ----------
@@ -1439,6 +1454,39 @@ export async function handle(state, e, emit) {
       emit({ type: 'status', state: 'thinking' })
       await analyzePage(s, read, e.image, emit) // frame + OCR text -> LLM
       emit({ type: 'status', state: 'watching' })
+      return s
+    }
+    case 'check_sheet': {
+      if (!e.image) {
+        emit({ type: 'sheet', sheet: sheetReport([], { name: s.name }) })
+        return s
+      }
+      emit({ type: 'status', state: 'reading' })
+      let read
+      try {
+        read = await readFrame(Buffer.from(e.image.slice(e.image.indexOf(',') + 1), 'base64'))
+      } catch (err) {
+        console.warn('[engine] OCR:', err.message)
+        emit({ type: 'hint', hint: { ...TROUBLE.read } })
+        emit({ type: 'sheet', sheet: null, error: true })
+        emit({ type: 'status', state: 'watching' })
+        return s
+      }
+      s.ai.localReads += 1
+      emit({ type: 'page', page: { ...read.page, at: Date.now() } })
+      emit({ type: 'status', state: 'thinking' })
+      await analyzePage(s, read, e.image, emit, { whole: true })
+      emit({ type: 'status', state: 'watching' })
+      return s
+    }
+    case 'explain': {
+      // "Show me how" on one exercise of the sheet report: its worked solution and animation
+      const part = s.parts.find((p) => p.id === e.partId)
+      if (part) {
+        s.stepsFor = null // asked for again on purpose
+        await sendSteps(s, part.raw || part.latex, emit, { reason: 'question' })
+        emit({ type: 'status', state: 'watching' })
+      }
       return s
     }
     case 'part_typed': {

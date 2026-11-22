@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import SubjectTabs from '@/components/SubjectTabs.vue'
 import { titleTex } from '@/lib/latex'
 import { sceneIcon, sceneLabel } from '@/lib/sceneKinds'
 // History: every session saved in the database, newest first. Each one has its summary, the
@@ -64,7 +65,12 @@ async function load() {
 onMounted(load)
 watch(() => state.student?.id, load)
 
-const sessions = computed(() => {
+// Maths, Reading and Science kept apart: a session belongs to the subject most of its records have
+// (records from before there were subjects are maths)
+const subject = ref<string>(state.subject)
+const subjectOf = (r: Record) => String((r.data as { subject?: string } | null)?.subject ?? 'maths')
+const SUBJECT_NAME: { [k: string]: string } = { maths: 'Maths', reading: 'Reading', science: 'Science' }
+const allSessions = computed(() => {
   const by = new Map<string, Record[]>()
   for (const r of records.value) by.set(r.sessionId, [...(by.get(r.sessionId) ?? []), r])
   return [...by.entries()]
@@ -78,9 +84,21 @@ const sessions = computed(() => {
         lines: sorted.filter((r) => r.kind === 'line'),
         questions: sorted.filter((r) => r.kind === 'question'),
         solutions: sorted.filter((r) => r.kind === 'steps'),
+        subject: mostCommon(sorted.map(subjectOf)),
       }
     })
     .sort((a, b) => b.last - a.last)
+})
+function mostCommon(xs: string[]) {
+  const n = new Map<string, number>()
+  for (const x of xs) n.set(x, (n.get(x) ?? 0) + 1)
+  return [...n.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? 'maths'
+}
+const sessions = computed(() => (subject.value === 'all' ? allSessions.value : allSessions.value.filter((s) => s.subject === subject.value)))
+const sessionCounts = computed(() => {
+  const c: { [k: string]: number } = { maths: 0, reading: 0, science: 0 }
+  for (const s of allSessions.value) c[s.subject] = (c[s.subject] ?? 0) + 1
+  return c
 })
 
 const when = (ms: number) => new Date(ms).toLocaleString([], { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
@@ -109,6 +127,7 @@ const str = (v: unknown) => (typeof v === 'string' ? v : '')
     <TopBar title="History" subtitle="Every session, saved: what you wrote, what you asked, and the animations." :sun="false" :avatar="state.student?.name[0] ?? '?'" :bell="0" :search="ui.search" @update:search="search" @avatar="ui.pickerOpen = true" />
 
     <div class="flex flex-col gap-4">
+      <SubjectTabs v-model="subject" :counts="sessionCounts" />
       <p v-if="loading" class="card p-6 text-[16px] font-bold text-ink-2">Loading your history…</p>
       <p v-else-if="error" class="card p-6 text-[16px] font-bold text-wrong">{{ error }}</p>
       <div v-else-if="!sessions.length" class="card flex flex-col items-center gap-3 p-10 text-center">
@@ -123,7 +142,7 @@ const str = (v: unknown) => (typeof v === 'string' ? v : '')
             <svg v-for="i in 3" :key="i" width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5l2.9 6 6.6.9-4.8 4.6 1.2 6.5L12 17.4 6.1 20.5l1.2-6.5L2.5 9.4l6.6-.9z" :fill="s.summary && i <= s.summary.stars ? '#ffc93c' : '#e3ebf3'" /></svg>
           </span>
           <span class="flex flex-col">
-            <span class="text-[18px] font-black">{{ s.summary?.title ?? 'Session' }}</span>
+            <span class="flex flex-wrap items-center gap-2 text-[18px] font-black">{{ s.summary?.title ?? 'Session' }}<span class="rounded-full bg-line-2 px-2 py-0.5 text-[11px] font-black uppercase tracking-wide text-ink-2">{{ SUBJECT_NAME[s.subject] ?? s.subject }}</span></span>
             <span class="text-[13px] font-bold text-ink-2">{{ when(s.at) }} · {{ count(s.lines.length, 'line') }} · {{ count(s.questions.length, 'question') }} · {{ count(s.solutions.length, 'solution') }}</span>
           </span>
           <svg class="ml-auto transition-transform" :class="open.has(s.id) ? 'rotate-180' : ''" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg>

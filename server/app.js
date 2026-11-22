@@ -261,7 +261,7 @@ function checkEvent(event) {
 }
 
 // The events the web app sends (docs/protocol.md). Anything else is a 400.
-const EVENTS = new Set(['session_start', 'subject', 'cut_part', 'part_typed', 'confirm_reply', 'set_age', 'pick_exercise', 'ask_start', 'ask_end', 'question_typed', 'point', 'session_end'])
+const EVENTS = new Set(['session_start', 'subject', 'cut_part', 'check_sheet', 'explain', 'part_typed', 'confirm_reply', 'set_age', 'pick_exercise', 'ask_start', 'ask_end', 'question_typed', 'point', 'session_end'])
 // Settings the web app keeps sending to the session on screen, also once it has ended (a new age
 // in Settings): applied, they change nothing that was saved. Any other event after the end is
 // refused: its work would not be in the session's summary and Practise again.
@@ -420,7 +420,7 @@ app.get('/api/review', async (req, res) => {
         items = await reviewForSession(r.sessionId, items ?? [])
         await saveHistory(r.sessionId, r.studentId, [{ ref: r.ref, kind: 'summary', at: r.at, data: { ...r.data, review: items, reviewVersion: REVIEW_VERSION } }]) // kept: the same ones next time
       }
-      out.push({ ref: r.ref, sessionId: r.sessionId, at: r.at, title: String(r.data?.title ?? ''), items })
+      out.push({ ref: r.ref, sessionId: r.sessionId, at: r.at, title: String(r.data?.title ?? ''), items, subject: r.data?.subject ?? 'maths' })
     }
     res.json(out)
   } catch (err) {

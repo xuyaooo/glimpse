@@ -221,6 +221,28 @@ console.log('\n9. Reading and Science: the paper is read and checked in every su
   const hints = ev.filter((e) => e.type === 'hint' && e.hint).map((e) => e.hint.text)
   check('a science session reads the paper (no "only maths")', ev.some((e) => e.type === 'page') && !hints.some((h) => /only check maths/i.test(h)), hints.join(' | ').slice(0, 120))
 }
+// ---------------------------------------------------------------- 10. the whole sheet
+console.log('\n10. "Check my whole sheet": every exercise judged and counted')
+{
+  const id = `e2e-sheet-${Date.now()}`
+  const post = async (event) => {
+    const r = await fetch(`${ENGINE}/api/engine`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionId: id, event }) })
+    return (await r.text()).split('\n').filter(Boolean).map((l) => JSON.parse(l))
+  }
+  await post({ type: 'session_start', student: 'e2e', name: 'Test', lang: 'en', subject: 'maths', age: 10 })
+  let t = performance.now()
+  const ev = await post({ type: 'check_sheet', image: photo('fractions.jpg') })
+  const sheet = ev.find((e) => e.type === 'sheet')?.sheet
+  check('the sheet report comes back', sheet && sheet.total >= 2, sheet && `${Math.round(performance.now() - t)} ms: ${sheet.message}`)
+  check('both wrong sums are counted as to fix (0 right)', sheet && sheet.right === 0 && sheet.wrong >= 2, sheet && sheet.items.map((x) => `${x.latex} -> ${x.verdict}`).join('; '))
+  check('no solution is pushed by itself after a whole-sheet check', !ev.some((e) => e.type === 'steps'))
+  t = performance.now()
+  const ex = await post({ type: 'explain', partId: sheet?.firstToFix })
+  const steps = ex.filter((e) => e.type === 'steps').pop()?.steps
+  check('"Show me how" gives the worked solution', steps && (steps.items?.length || steps.scene), steps && `${Math.round(performance.now() - t)} ms: ${steps.about} = ${steps.result}`)
+  const saved = await json(`${ENGINE}/api/history/sessions/${id}`)
+  check('every record carries its subject', saved.length && saved.every((r) => r.data?.subject === 'maths'), `${saved.length} records: ${[...new Set(saved.map((r) => r.kind))].join(', ')}`)
+}
 
 const failed = results.filter((x) => !x.ok)
 console.log(`\n${results.length - failed.length}/${results.length} checks passed${failed.length ? `; failed: ${failed.map((f) => f.name).join('; ')}` : ''}\n`)
