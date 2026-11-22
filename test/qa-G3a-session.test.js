@@ -494,3 +494,24 @@ test('a sheet mixing subjects: every exercise counts, each with its subject, sol
   assert.equal(ex.last('steps').steps.scene?.kind, 'speed')
   assert.equal(ex.hist.find((h) => h.kind === 'steps').data.subject, 'science')
 })
+
+test('a worded problem with numbers is maths, and a mark whose note is about another line is not kept', async () => {
+  resetStub()
+  const s = session('farmer', { subject: 'maths' })
+  const farmer = 'A farmer has a field that is 120 m long and 80 m wide. He wants to put a fence all around it. How many metres of fence does he need?'
+  const lines = [farmer, '$$1 + 2 + 3 + 4 + 5 + 6 + 7$$', '$24 : 6 = 4$']
+  st.ocr = () => lines.join('\n')
+  st.page = () => ({
+    lines: [
+      { n: 1, kind: 'work', verdict: 'unfinished' },
+      { n: 2, kind: 'work', verdict: 'wrong', note: 'You added numbers that are not the sides of the field. The fence goes around the outside.' },
+      { n: 3, kind: 'work', verdict: 'correct' },
+    ],
+    feedback: 'fb',
+  })
+  const r = await send(s, { type: 'check_sheet', image: frame })
+  const items = r.last('sheet').sheet.items
+  assert.equal(items[0].subject, 'maths') // not science: the rules see no science in it
+  assert.deepEqual([items[1].verdict, items[1].note], ['unsure', null]) // the fence note was about line 1
+  assert.equal(items[2].verdict, 'right')
+})

@@ -132,7 +132,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey, true))
             <ul class="m-0 flex list-none flex-wrap gap-2 p-0">
               <li v-for="(r, i) in s.review.slice(0, 3)" :key="r.id" class="flex min-w-0 items-center gap-2 rounded-xl bg-[#fffdf7] px-3 py-2 ring-1 ring-line" :style="{ animation: `pop 400ms ${0.3 + i * 0.1}s both` }">
                 <span class="shrink-0 text-[11px] font-black uppercase tracking-wide text-[#b4531a]">{{ LEVEL[r.level] }}</span>
-                <ExerciseText :latex="r.exercise" math="text-[18px]" words="text-[15px] font-bold" />
+                <ExerciseText :latex="r.exercise" :lines="2" math="text-[18px]" words="text-[15px] font-bold" />
               </li>
             </ul>
             <button type="button" class="inline-flex min-h-11 w-fit items-center gap-2 rounded-xl bg-tangerine px-4 text-[15px] font-black text-white shadow transition hover:scale-[1.02]" @click="practise">Practise in My work</button>

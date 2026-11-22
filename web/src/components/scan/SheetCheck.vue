@@ -4,9 +4,8 @@
 // right / to fix / not finished, and how to fix each.
 import { computed, onBeforeUnmount, onMounted } from 'vue'
 import FocusTrap from '../FocusTrap.vue'
-import MathTex from '../MathTex.vue'
 import Mascot from '../Mascot.vue'
-import { titleTex, wordsOnly } from '@/lib/latex'
+import ExerciseText from '../ExerciseText.vue'
 import { itemName, youNote } from '@/lib/sheet'
 import type { SheetItem, SheetReport } from '@/lib/types'
 
@@ -84,8 +83,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey, true))
                 <li v-for="(it, i) in report.items" :key="it.partId" class="flex items-start gap-3 rounded-2xl border-2 p-3" :class="it.verdict === 'right' ? 'border-[#cdeedb]' : it.verdict === 'wrong' ? 'border-[#f6cdd1]' : 'border-line'" :style="{ animation: `rise 400ms ${0.1 + i * 0.05}s both` }">
                   <span class="flex h-8 min-w-8 shrink-0 items-center justify-center rounded-full bg-line-2 px-1.5 text-[13px] font-black text-ink-2">{{ itemName(it) }}</span>
                   <div class="min-w-0 flex-1">
-                    <p v-if="wordsOnly(it.latex)" class="text-[16px] font-bold leading-snug">{{ wordsOnly(it.latex) }}</p>
-                    <MathTex v-else :latex="titleTex(it.latex)" class="block overflow-x-auto text-[20px]" />
+                    <ExerciseText :latex="it.latex" :lines="2" math="text-[20px]" words="text-[16px] font-bold" />
                     <p v-if="it.note" class="mt-1 text-[13px] font-semibold text-ink-2">{{ youNote(it.note) }}</p>
                   </div>
                   <div class="flex shrink-0 flex-col items-end gap-1.5">

@@ -3,6 +3,7 @@
 // what was read from it, whether it's right, the explanation (in step with the drawing on the
 // camera), the worked solution, similar exercises, answers to questions, and what's going on.
 // "Whole sheet": every exercise on the paper (SheetPanel), filled by "Check my whole sheet".
+import { ref } from 'vue'
 import ExerciseText from '../ExerciseText.vue'
 import ActivityFeed from './ActivityFeed.vue'
 import StepByStep from './StepByStep.vue'
@@ -32,6 +33,8 @@ defineProps<{
 defineEmits<{ step: [n: number]; replay: []; select: [id: number]; 'update:tab': [tab: 'line' | 'sheet']; checkSheet: []; explain: [id: number] }>()
 
 const BADGE = { correct: 'bg-right-mark', wrong: 'bg-wrong-mark', reading: 'bg-lagoon-bright', unsure: 'bg-[#e0a21a]' }
+// the photo of the exercise: small, until the student opens it
+const bigPhoto = ref(false)
 </script>
 
 <template>
@@ -92,19 +95,25 @@ const BADGE = { correct: 'bg-right-mark', wrong: 'bg-wrong-mark', reading: 'bg-l
       </div>
 
       <div v-else class="mt-3 flex flex-col gap-3">
-        <div class="flex flex-col gap-1.5">
-          <figure v-if="crop" :key="crop.length" class="m-0 flex flex-col gap-1.5" style="animation: rise 500ms both">
-            <figcaption class="text-[12px] font-black text-ink-2">What the camera saw</figcaption>
-            <img :src="crop" alt="The paper, as the camera saw it" class="aspect-video w-full rounded-xl border border-line bg-[#0b1d28] object-contain shadow-sm" />
-          </figure>
-          <svg v-if="crop" class="ml-6" width="20" height="26" viewBox="0 0 20 26" aria-hidden="true"><path class="draw" pathLength="1" style="--dur: 0.4s; --delay: 0.3s" d="M10 2v20M3 15l7 7 7-7" fill="none" stroke="#14A096" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" /></svg>
+        <div class="flex flex-col gap-2.5">
           <figure class="m-0 flex flex-col gap-1.5">
             <figcaption class="text-[12px] font-black text-ink-2">What I read</figcaption>
             <div v-if="selected.verdict === 'reading' && state.confirm?.partId !== selected.id" class="flex flex-col gap-2 py-2">
               <span class="shimmer h-10 w-full rounded-xl" />
               <span class="text-[13px] font-bold text-lagoon">Reading your handwriting…</span>
             </div>
-            <ExerciseText v-else :key="selected.latex" :latex="selected.latex" :math="selected.latex.length > 40 ? 'write-on text-[26px]' : 'write-on text-[38px]'" words="text-[20px] font-black text-ink" style="--dur: 0.7s" />
+            <ExerciseText v-else :key="selected.latex" :latex="selected.latex" :lines="4" :math="selected.latex.length > 40 ? 'write-on text-[26px]' : 'write-on text-[36px]'" words="text-[20px] font-black text-ink" style="--dur: 0.7s" />
+          </figure>
+          <!-- the photo it was read from: small, opens big -->
+          <figure v-if="crop" :key="crop.length" class="m-0 flex flex-col gap-2" style="animation: rise 500ms both">
+            <button type="button" class="group flex items-center gap-3 self-start rounded-xl border border-line bg-white p-1.5 pr-3 text-left transition hover:border-lagoon-soft hover:shadow-sm" :aria-expanded="bigPhoto" @click="bigPhoto = !bigPhoto">
+              <img :src="crop" alt="" class="aspect-video h-12 rounded-lg bg-[#0b1d28] object-contain" />
+              <span class="flex flex-col">
+                <span class="text-[12px] font-black text-ink-2">What the camera saw</span>
+                <span class="text-[12px] font-bold text-lagoon-deep group-hover:underline">{{ bigPhoto ? 'Smaller' : 'See the photo' }}</span>
+              </span>
+            </button>
+            <img v-if="bigPhoto" :src="crop" alt="The paper, as the camera saw it" class="aspect-video w-full rounded-xl border border-line bg-[#0b1d28] object-contain shadow-sm" style="animation: rise 300ms both" />
           </figure>
         </div>
 
@@ -236,7 +245,7 @@ const BADGE = { correct: 'bg-right-mark', wrong: 'bg-wrong-mark', reading: 'bg-l
           @click="$emit('select', p.id)"
         >
           <span class="flex size-6 shrink-0 items-center justify-center rounded-full text-[12px] font-black text-white" :class="BADGE[p.verdict]">{{ p.id }}</span>
-          <ExerciseText :latex="p.latex" math="text-[16px]" words="text-[14px] font-bold" />
+          <ExerciseText :latex="p.latex" :lines="2" :more="false" math="text-[16px]" words="text-[14px] font-bold" />
         </button>
       </div>
     </section>

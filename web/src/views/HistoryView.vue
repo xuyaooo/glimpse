@@ -173,7 +173,7 @@ const str = (v: unknown) => (typeof v === 'string' ? v : '')
               <img v-if="str(q.data.photo)" :src="str(q.data.photo)" alt="Where you pointed" class="h-20 w-28 shrink-0 rounded-xl object-cover" />
               <div class="min-w-0">
                 <p class="text-[15px] font-black">« {{ str(q.data.text) }} »</p>
-                <ExerciseText v-if="str(q.data.about)" :latex="str(q.data.about)" math="text-[17px]" words="text-[15px] font-bold" />
+                <ExerciseText v-if="str(q.data.about)" :latex="str(q.data.about)" :lines="2" math="text-[17px]" words="text-[15px] font-bold" />
                 <p class="mt-1 text-[14px] font-semibold">{{ str(q.data.answer) }}</p>
               </div>
             </div>
@@ -184,7 +184,7 @@ const str = (v: unknown) => (typeof v === 'string' ? v : '')
             <div class="flex flex-wrap gap-2">
               <button v-for="r in s.solutions" :key="r.ref" type="button" class="flex items-center gap-2.5 rounded-2xl border-2 border-line bg-white px-3.5 py-2 transition hover:-translate-y-0.5 hover:border-lagoon disabled:cursor-default disabled:hover:translate-y-0 disabled:hover:border-line" :disabled="!(r.data as any).scene" @click="watchIt(r)">
                 <span v-if="(r.data as any).scene" class="flex size-8 items-center justify-center rounded-full bg-tangerine text-white" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg></span>
-                <ExerciseText :latex="str(r.data.about)" math="text-[17px]" words="text-[15px] font-bold" />
+                <ExerciseText :latex="str(r.data.about)" :lines="2" math="text-[17px]" words="text-[15px] font-bold" />
                 <span v-if="(r.data as any).scene" class="text-[12px] font-black text-ink-2">{{ sceneIcon((r.data as any).scene.kind) }} {{ sceneLabel((r.data as any).scene.kind) }}</span>
               </button>
             </div>

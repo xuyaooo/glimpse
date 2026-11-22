@@ -4,8 +4,7 @@
 // score, Glim's sentence, and every exercise with its verdict, what went wrong, "Show me how"
 // (worked solution + animation) and "See it" (the line in the other tab).
 import { computed, ref, watch } from 'vue'
-import MathTex from '../MathTex.vue'
-import { titleTex, wordsOnly } from '@/lib/latex'
+import ExerciseText from '../ExerciseText.vue'
 import { itemName, youNote } from '@/lib/sheet'
 import { SUBJECTS } from '@/lib/subjects'
 import { speak } from '@/lib/speech'
@@ -139,8 +138,7 @@ const cheer = computed(() => (props.report && props.report.total && props.report
               </span>
               <span class="rounded-full px-2 py-0.5 text-[11px] font-black" :class="VERDICT[it.verdict].cls">{{ VERDICT[it.verdict].label }}</span>
             </div>
-            <p v-if="wordsOnly(it.latex)" class="mt-0.5 text-[16px] font-bold leading-snug">{{ wordsOnly(it.latex) }}</p>
-            <MathTex v-else :latex="titleTex(it.latex)" class="mt-0.5 block overflow-x-auto text-[20px]" />
+            <ExerciseText :latex="it.latex" :lines="2" class="mt-0.5" math="text-[20px]" words="text-[16px] font-bold" />
             <p v-if="it.note" class="mt-1 flex items-start gap-1.5 text-[13px] font-semibold leading-snug text-ink-2"><span v-if="it.verdict === 'wrong'" aria-hidden="true">💡</span>{{ youNote(it.note) }}</p>
           </div>
           <div class="flex shrink-0 flex-col items-end gap-1.5">

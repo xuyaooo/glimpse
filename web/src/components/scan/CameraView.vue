@@ -166,7 +166,7 @@ const hint = computed(() => {
           <Mascot v-if="!narrow" :size="58" class="shrink-0" />
           <div class="pointer-events-auto relative max-h-full min-w-0 flex-1 overflow-y-auto rounded-3xl rounded-bl-md bg-white/95 px-5 py-3 shadow-xl backdrop-blur" aria-live="polite">
             <p :lang="question?.lang" class="text-[19px] font-black leading-snug">{{ question?.text && question.text !== '…' ? `« ${question.text} »` : status !== 'listening' ? (status === 'answering' ? 'Reading your paper…' : 'Listening') : listenStatus.phase === 'speaking' ? 'I’m listening…' : listenStatus.phase === 'writing' ? 'Writing down your question…' : 'I’m listening: what’s your question?' }}</p>
-            <p v-if="question?.about" class="mt-0.5 flex flex-wrap items-center gap-2 text-[14px] font-semibold text-ink-2">About <ExerciseText :latex="question.about" math="text-[18px] text-ink" words="text-[15px] font-bold text-ink" /></p>
+            <p v-if="question?.about" class="mt-0.5 flex flex-wrap items-center gap-2 text-[14px] font-semibold text-ink-2">About <ExerciseText :latex="question.about" :lines="2" :more="false" class="min-w-0 flex-1" math="text-[18px] text-ink" words="text-[15px] font-bold text-ink" /></p>
             <p v-else class="mt-0.5 text-[14px] font-semibold text-ink-2">{{ question?.pointedAt ? `About line ${question.pointedAt.partId}${question.pointedAt.token ? `, the ${question.pointedAt.token}` : ''}` : status === 'answering' ? 'Glim is looking at the photo' : status === 'listening' ? (listenStatus.model === 'loading' ? `Getting my ears ready, the first time only: ${Math.round(listenStatus.progress * 100)}%` : 'Say it out loud. Stop talking and I’ll send it with the photo') : 'Point at your paper while you ask' }}</p>
             <!-- the sound of the voice while listening; while Glim thinks, a spinner -->
             <span v-if="asking && status === 'listening'" class="absolute right-5 top-4 flex h-6 items-end gap-1" aria-hidden="true">
@@ -182,7 +182,7 @@ const hint = computed(() => {
           <Mascot v-if="!narrow" :size="58" class="shrink-0" />
           <div class="pointer-events-auto relative flex max-h-full min-w-0 flex-1 flex-col rounded-3xl rounded-bl-md bg-white/95 shadow-xl backdrop-blur" aria-live="polite">
             <div class="min-h-0 overflow-y-auto px-5 py-3">
-              <p v-if="question?.about" class="flex flex-wrap items-center gap-2 text-[13px] font-black text-violet">About <ExerciseText :latex="question.about" math="text-[16px] text-ink" words="text-[14px] font-bold text-ink" /></p>
+              <p v-if="question?.about" class="flex flex-wrap items-center gap-2 text-[13px] font-black text-violet">About <ExerciseText :latex="question.about" :lines="2" :more="false" class="min-w-0 flex-1" math="text-[16px] text-ink" words="text-[14px] font-bold text-ink" /></p>
               <p :lang="answer?.lang" class="text-[17px] font-bold leading-snug">{{ answer?.text }}</p>
               <p v-if="answer?.translation" lang="en" class="mt-0.5 text-[13px] text-ink-2">{{ answer.translation }}</p>
             </div>

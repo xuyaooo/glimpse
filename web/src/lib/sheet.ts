@@ -9,9 +9,9 @@ export const itemName = (it: Pick<SheetItem, 'n' | 'label'>) => (it.label ? `${i
 
 /** A note written to follow "you" ("forgot to carry the ten") as a sentence: "You forgot to carry the ten." */
 export function youNote(note: string) {
-  const n = note.trim().replace(/[.]+$/, '')
+  const n = note.trim().replace(/^["']+|["']+$/g, '').replace(/^(?:you\s+)+/i, '').replace(/[.]+$/, '')
   if (!n) return ''
-  const said = /^(?:you|the|this|that|it|its|not|no|couldn|can|a|an|check)/i.test(n) ? n : `you ${n}`
+  const said = /^(?:you|the|this|that|it|its|not|no|couldn|can|a|an|check)\b/i.test(n) ? n : `you ${n}`
   return `${said.charAt(0).toUpperCase()}${said.slice(1)}.`
 }
 

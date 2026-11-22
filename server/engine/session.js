@@ -590,7 +590,13 @@ Write maths in the feedback as plain text that can be read aloud (e.g. x², 3/4)
     // the same maths as before (maybe written differently by the OCR): the line is kept as it was
     if (prev && partKey(prev) === keys[i]) return { part: prev.subject ? prev : Object.assign(prev, { subject }), j, changed: false }
     let verdict = j?.verdict === 'correct' || j?.verdict === 'wrong' ? j.verdict : 'unsure'
-    let note = verdict === 'wrong' && typeof j?.note === 'string' ? j.note : j?.verdict === 'unfinished' ? 'not finished yet' : undefined
+    let note = verdict === 'wrong' && typeof j?.note === 'string' ? j.note.replace(/^\s*["']?\s*(?:you\s+)+/i, '') : j?.verdict === 'unfinished' ? 'not finished yet' : undefined
+    // a mark whose note is about another line of the page (seen live: a long sum "wrong" because
+    // "the fence goes around the field", from the problem above it) can't be trusted
+    if (verdict === 'wrong' && note && aboutAnotherLine(note, line, read.lines)) {
+      verdict = 'unsure'
+      note = undefined
+    }
     // exact checking overrides the model on what it can check (and the note is computed too: the
     // model's guess at the mistake can be about something else)
     if (sum) {
@@ -1022,6 +1028,16 @@ const TOPIC = {
 // The session follows it (the tutor's words, what counts as work, the records' subject) and the
 // app is told.
 const SUBJECTS = ['maths', 'reading', 'science']
+// A note that borrows the words of another line, not this one's ("the fence goes around the
+// field" on "1 + 2 + ... + 17"): two or more of them, leaving out words any note could use.
+const COMMON = new Set('that this with have need what does from they them your will more less than then when into each many much number numbers answer total sides side same added adding again check right wrong first next step line lines just only about there their these those other'.split(' '))
+function aboutAnotherLine(note, line, lines) {
+  const words = (t) => new Set((String(t).toLowerCase().match(/[a-z]{4,}/g) ?? []).filter((w) => !COMMON.has(w)))
+  const mine = words(line)
+  const others = new Set(lines.filter((l) => l !== line).flatMap((l) => [...words(l)]))
+  return [...words(note)].filter((w) => others.has(w) && !mine.has(w)).length >= 2
+}
+
 // The kind of exercise the rules recognise in a line ("drive 150 km at 60 km/h" -> speed), or null.
 function exerciseKind(s, line) {
   try {
@@ -1041,8 +1057,12 @@ async function lineSubjects(s, lines) {
       if (looksMathy(line)) return 'maths'
       // only what reads like an exercise (a question, a number, a sentence): not "Exercise Sheet"
       if (!/\?|\d/.test(line) && line.trim().split(/\s+/).length < 4) return null
+      // a worded problem with numbers is maths unless the rules saw a science one (speed, units,
+      // circuits... above): seen live, Laya took a fence around a field for science (0.78)
+      const numbers = (line.match(/\d+(?:[.,]\d+)?/g) ?? []).length >= 2
       const laya = await askLaya('/decide', { text: line }, 800)
-      return laya?.subject && laya.subject_probability >= 0.6 && SUBJECTS.includes(laya.subject) ? laya.subject : null
+      const sure = laya?.subject && SUBJECTS.includes(laya.subject) && laya.subject_probability >= (numbers ? 0.9 : 0.6)
+      return sure ? laya.subject : numbers ? 'maths' : null
     }),
   )
 }

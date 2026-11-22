@@ -119,7 +119,7 @@ function watchIt(item: ReviewItem, i: number) {
 
           <!-- the exercise, on a bit of squared paper -->
           <div class="review-paper flex min-h-[76px] items-center justify-center overflow-x-auto rounded-2xl px-3 py-4">
-            <ExerciseText :latex="item.exercise" math="text-[26px]" words="text-[18px] font-black" />
+            <ExerciseText :latex="item.exercise" :lines="2" math="text-[26px]" words="text-[18px] font-black" />
           </div>
           <p class="text-[14px] font-semibold leading-snug text-ink-2">{{ item.why }}</p>
 

@@ -173,7 +173,7 @@ const learned = computed(() => {
                   Watch the animation
                 </button>
                 <p v-if="savedSelected.solution?.result" class="flex items-center gap-2 text-[14px] font-bold">Answer <MathTex :latex="savedSelected.solution.result" class="text-[18px]" /></p>
-                <ExerciseText v-else-if="savedSelected.solution?.about" :latex="savedSelected.solution.about" class="text-ink-2" math="text-[13px]" words="text-[13px] font-semibold" />
+                <ExerciseText v-else-if="savedSelected.solution?.about" :latex="savedSelected.solution.about" :lines="2" class="text-ink-2" math="text-[13px]" words="text-[13px] font-semibold" />
               </div>
             </div>
           </div>

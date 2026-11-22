@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { titleTex, wordsOnly } from '@/lib/latex'
+import ExerciseText from '../ExerciseText.vue'
 import { sceneIcon, sceneLabel } from '@/lib/sceneKinds'
 // The solution beside the camera, made for learning, not copying. It opens on "Try it yourself":
 // hints one at a time (a nudge first, almost the next step last), then the steps one by one if
@@ -81,8 +81,7 @@ function playFrom(i: number) {
   <section aria-label="Let's solve it" class="flex flex-col gap-4 rounded-[24px] bg-white p-5 shadow-[0_14px_30px_-22px_rgb(24_41_74/0.5)]" style="animation: rise 500ms both">
     <div>
       <p class="text-[12px] font-black uppercase tracking-[0.16em] text-lagoon">Let's solve it</p>
-      <p v-if="wordsOnly(steps.about)" class="mt-0.5 text-[19px] font-black leading-snug">{{ wordsOnly(steps.about) }}</p>
-      <MathTex v-else-if="steps.about" :latex="titleTex(steps.about)" class="mt-0.5 block overflow-x-auto text-[24px]" />
+      <ExerciseText v-if="steps.about" :latex="steps.about" :lines="2" class="mt-0.5" math="text-[24px]" words="text-[19px] font-black" />
     </div>
 
     <!-- 1. try it yourself: hints first, then a step at a time -->
