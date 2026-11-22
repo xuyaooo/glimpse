@@ -10,7 +10,7 @@ It runs on your own computer with free, open models, or with cloud models throug
 
 LauzHack 2026, for the Logitech, AXA, IMC and Scholé challenges.
 
-![The camera page: what was read, the hint, and the solution as an animation](docs/screenshots/camera.jpg)
+![Glimpse Home: today's progress, continue your practice and My work by subject](docs/screenshots/hero.png)
 
 - [What it does](#what-it-does)
 - [Run it on your computer](#run-it-on-your-computer)
