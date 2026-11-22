@@ -26,7 +26,7 @@ test('expressions: LaTeX and plain text, implicit multiplication, functions', ()
 })
 
 test('rules recognise each kind of exercise', () => {
-  assert.deepEqual(detectScene('\\int_{0}^{1} \\frac{1}{1+x} dx'), { kind: 'area', expression: '\\frac{1}{1+x}', from: 0, to: 1, variable: 'x', tex: '\\int_{0}^{1} \\frac{1}{1+x} dx' })
+  assert.deepEqual(detectScene('\\int_{0}^{1} \\frac{1}{1+x} dx'), { kind: 'area', expression: '\\frac{1}{1+x}', from: 0, to: 1, fromTex: '0', toTex: '1', variable: 'x', tex: '\\int_{0}^{1} \\frac{1}{1+x} dx' })
   // OCR reads the integral sign as S
   assert.equal(detectScene('S_{0}^{1} \\frac{1}{1+x} dx =').kind, 'area')
   assert.equal(detectScene('S_0^+ \\frac{1}{1+x} dx'), null) // "+" is no bound: the tutor's clean copy is used instead

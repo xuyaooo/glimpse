@@ -98,7 +98,9 @@ function watchIt(item: ReviewItem, i: number) {
 
       <p v-if="!session.items.length" class="rounded-2xl bg-line-2 px-4 py-4 text-[15px] font-bold text-ink-2">Nothing to practise from this session: no maths was written. Write a line next time, and Glim will pick exercises for you.</p>
 
-      <TransitionGroup v-else tag="ol" name="list" class="m-0 grid list-none gap-3 p-0 sm:grid-cols-2 2xl:grid-cols-3">
+      <!-- another session's exercises replace the list at once (keyed by session): fading the old
+           cards out would take them out of the page's flow, and the page would jump -->
+      <TransitionGroup v-else :key="session.ref" tag="ol" name="list" class="m-0 grid list-none gap-3 p-0 sm:grid-cols-2 2xl:grid-cols-3">
         <li
           v-for="(item, i) in session.items"
           :key="`${session.ref}-${item.id}`"

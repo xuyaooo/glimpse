@@ -99,6 +99,27 @@ const ticksX = computed(() => {
   return out
 })
 const fmt = (v: number) => (Number.isInteger(v) ? String(v) : String(+v.toFixed(3)))
+// where each point's label goes: above it, to the right, unless that covers a label placed
+// before (the vertex between two roots close together): then to the left, else under the point
+type Box = { x0: number; x1: number; y0: number; y1: number }
+const labels = computed(() => {
+  const placed: Box[] = []
+  const free = (b: Box) => placed.every((o) => b.x1 < o.x0 || b.x0 > o.x1 || b.y1 < o.y0 || b.y0 > o.y1)
+  return plot.value.markers.map((m) => {
+    if (!m.label) return null
+    const x = X(m.x)
+    const y = Y(m.y)
+    const w = m.label.length * 9.5
+    const tries = [
+      { x: x + 12, y: y - 14, anchor: 'start', box: { x0: x + 12, x1: x + 12 + w, y0: y - 28, y1: y - 10 } },
+      { x: x - 12, y: y - 14, anchor: 'end', box: { x0: x - 12 - w, x1: x - 12, y0: y - 28, y1: y - 10 } },
+      { x, y: y + 30, anchor: 'middle', box: { x0: x - w / 2, x1: x + w / 2, y0: y + 16, y1: y + 34 } },
+    ]
+    const t = tries.find((c) => free(c.box)) ?? tries[0]
+    placed.push(t.box)
+    return t
+  })
+})
 const val = computed(() => {
   const r = plot.value.region
   return r && r.value != null && Number.isFinite(r.value) && has('value') ? r : null
@@ -145,7 +166,7 @@ const val = computed(() => {
     <template v-for="(m, i) in plot.markers" :key="`m${i}`">
       <g v-if="has(m.when) && inside(m.y)" class="scene-pop" :style="{ animationDelay: `${m.delay ?? 0}s` }">
         <circle :cx="X(m.x)" :cy="Y(m.y)" :r="m.kind === 'hole' ? 10 : 8" :fill="m.kind === 'hole' ? '#0b1d28' : m.color" :stroke="m.kind === 'hole' ? m.color : '#0b1d28'" stroke-width="3.5" />
-        <text v-if="m.label" :x="X(m.x) + 12" :y="Y(m.y) - 14" font-size="16" font-weight="900" :fill="m.color">{{ m.label }}</text>
+        <text v-if="m.label && labels[i]" :x="labels[i]!.x" :y="labels[i]!.y" :text-anchor="labels[i]!.anchor" font-size="16" font-weight="900" :fill="m.color">{{ m.label }}</text>
       </g>
     </template>
     <!-- the area's value -->

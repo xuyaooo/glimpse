@@ -260,6 +260,26 @@ function checkEvent(event) {
   return null
 }
 
+// The events the web app sends (docs/protocol.md). Anything else is a 400.
+const EVENTS = new Set(['session_start', 'subject', 'cut_part', 'part_typed', 'confirm_reply', 'set_age', 'pick_exercise', 'ask_start', 'ask_end', 'question_typed', 'point', 'session_end'])
+// Settings the web app keeps sending to the session on screen, also once it has ended (a new age
+// in Settings): applied, they change nothing that was saved. Any other event after the end is
+// refused: its work would not be in the session's summary and Practise again.
+const SETTINGS = new Set(['set_age', 'subject', 'pick_exercise'])
+
+// One event at a time per session: each one loads the session, changes it and saves it, so two
+// at once (two tabs, another API client) would each save their own copy and one would be lost
+// (and a part id given twice). In this process the events of a session wait for each other.
+const queues = new Map()
+function oneAtATime(sessionId, job) {
+  const prev = queues.get(sessionId) ?? Promise.resolve()
+  const run = prev.then(job, job)
+  const tail = run.catch(() => {})
+  queues.set(sessionId, tail)
+  tail.then(() => queues.get(sessionId) === tail && queues.delete(sessionId))
+  return run
+}
+
 // POST /api/engine { sessionId, event } -> NDJSON stream of engine events
 app.post('/api/engine', async (req, res) => {
   const { sessionId, event } = req.body || {}
@@ -267,30 +287,51 @@ app.post('/api/engine', async (req, res) => {
   if (!event || typeof event !== 'object' || typeof event.type !== 'string') return res.status(400).json({ error: '"event" with a "type" is required' })
   const bad = checkEvent(event)
   if (bad) return res.status(400).json({ error: bad })
-  // A session is started once: session_start never replaces (wipes) a session that exists.
-  if (event.type === 'session_start' && (await loadSession(sessionId).catch(() => null))) {
-    return res.status(409).json({ error: 'this session already exists: start a new one with a new "sessionId"' })
-  }
-  res.writeHead(200, { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no' })
-  const emit = (ev) => res.write(`${JSON.stringify(ev)}\n`)
-  try {
-    let state = event.type === 'session_start' ? null : await loadSession(sessionId)
-    if (!state) {
-      state = newState({ id: sessionId, student: event.student, name: event.name, lang: event.lang, subject: event.subject, age: Number(event.age) || null })
-      if (event.type !== 'session_start') emit({ type: 'status', state: 'watching' })
+  if (!EVENTS.has(event.type)) return res.status(400).json({ error: `unknown event type "${event.type}"` })
+  await oneAtATime(sessionId, async () => {
+    const trouble = () => {
+      res.write(`${JSON.stringify({ type: 'hint', hint: { text: "I'm having trouble thinking right now. Please try again in a moment.", lang: 'en' } })}\n`)
+      res.end(`${JSON.stringify({ type: 'status', state: 'watching' })}\n`)
     }
-    state = await handle(state, event, emit)
-    const records = state.history || []
-    state.history = []
-    await saveSession(state)
-    await saveHistory(state.id, state.student, records).catch((err) => console.warn('[engine] history not saved:', err.message))
-  } catch (err) {
-    // the reason is logged, not shown (or read aloud) to the child
-    console.warn(`[engine] ${event.type} failed:`, err.message)
-    emit({ type: 'hint', hint: { text: "I'm having trouble thinking right now. Please try again in a moment.", lang: 'en' } })
-    emit({ type: 'status', state: 'watching' })
-  }
-  res.end()
+    let state = null
+    try {
+      state = await loadSession(sessionId)
+    } catch (err) {
+      // the reason is logged, not shown (or read aloud) to the child
+      console.warn('[engine] session not loaded:', err.message)
+      res.writeHead(200, { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-cache' })
+      return trouble()
+    }
+    // A session is started once: session_start never replaces (wipes) a session that exists.
+    if (event.type === 'session_start' && state) return res.status(409).json({ error: 'this session already exists: start a new one with a new "sessionId"' })
+    // Every other event belongs to a session that was started (never one made up for "unknown").
+    // Only a database in memory (on Vercel without DATABASE_URL) forgets sessions between
+    // requests: there the event still gets a session of its own, as nothing is kept anyway.
+    if (event.type !== 'session_start' && !state && storeKindNow() !== 'pglite-memory') return res.status(404).json({ error: 'no such session: start it with session_start' })
+    if (state?.ended && event.type !== 'session_end' && !SETTINGS.has(event.type)) return res.status(409).json({ error: 'this session has ended: start a new one with a new "sessionId"' })
+    res.writeHead(200, { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no' })
+    const emit = (ev) => res.write(`${JSON.stringify(ev)}\n`)
+    try {
+      // Ending a session again: its summary as it was saved (with the "I did it" marks), not a new one
+      if (event.type === 'session_end' && state.ended && state.summary) {
+        const saved = await historyRecord(`${sessionId}:summary`).catch(() => null)
+        emit({ type: 'summary', summary: saved?.kind === 'summary' && saved.data ? saved.data : state.summary })
+        emit({ type: 'status', state: 'idle' })
+        return res.end()
+      }
+      state ??= newState({ id: sessionId, student: event.student, name: event.name, lang: event.lang, subject: event.subject, age: Number(event.age) || null })
+      state = await handle(state, event, emit)
+      const records = state.history || []
+      state.history = []
+      await saveSession(state)
+      await saveHistory(state.id, state.student, records).catch((err) => console.warn('[engine] history not saved:', err.message))
+    } catch (err) {
+      // the reason is logged, not shown (or read aloud) to the child
+      console.warn(`[engine] ${event.type} failed:`, err.message)
+      return trouble()
+    }
+    res.end()
+  })
 })
 
 // GET /api/students -> dashboard summaries (StudentSummary[]) ; /api/students/:id -> one
@@ -352,13 +393,16 @@ app.get('/api/history/sessions/:id', async (req, res) => {
 
 // ---------- practise again: the exercises suggested after each finished session ----------
 
-// A session that ended before suggestions existed: made now from its saved lines and questions
-async function reviewForSession(sessionId) {
+// A session that ended before suggestions existed (or with older ones): made now from its saved
+// lines and questions, its subject and the exercises Glim solved in it, as at the end of the
+// session. The tutor's ideas can't be asked for again: the ones it gave then are kept.
+async function reviewForSession(sessionId, old = []) {
   const records = await sessionHistory(sessionId)
   const lines = records.filter((r) => r.kind === 'line').map((r) => ({ latex: String(r.data?.latex ?? ''), verdict: r.data?.verdict, note: r.data?.note ?? null }))
   const questions = records.filter((r) => r.kind === 'question').map((r) => ({ about: r.data?.about ?? null }))
   const state = await loadSession(sessionId).catch(() => null)
-  return suggestReview({ seed: sessionId, lines, questions, age: Number(state?.age) || null })
+  const ideas = (Array.isArray(old) ? old : []).filter((x) => x?.level === 'idea' && typeof x.exercise === 'string').map((x) => ({ exercise: x.exercise, why: String(x.why ?? '') }))
+  return suggestReview({ seed: sessionId, lines, questions, ideas, solved: Array.isArray(state?.solved) ? state.solved : [], subject: state?.subject || 'maths', age: Number(state?.age) || null })
 }
 
 // GET /api/review?student=amara -> newest session first:
@@ -373,7 +417,7 @@ app.get('/api/review', async (req, res) => {
       let items = Array.isArray(r.data?.review) ? r.data.review : null
       // none yet (the session ended before there were suggestions), or older ones nobody started on
       if (!items || (r.data.reviewVersion !== REVIEW_VERSION && !items.some((x) => x?.done))) {
-        items = await reviewForSession(r.sessionId)
+        items = await reviewForSession(r.sessionId, items ?? [])
         await saveHistory(r.sessionId, r.studentId, [{ ref: r.ref, kind: 'summary', at: r.at, data: { ...r.data, review: items, reviewVersion: REVIEW_VERSION } }]) // kept: the same ones next time
       }
       out.push({ ref: r.ref, sessionId: r.sessionId, at: r.at, title: String(r.data?.title ?? ''), items })

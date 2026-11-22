@@ -75,7 +75,11 @@ function onMeta() {
 }
 
 const live = computed(() => !props.paper && props.camera === 'live')
+// a question on the go: being said (status listening), then thought about
 const listening = computed(() => props.asking || props.status === 'answering')
+// Beside the docked card (54% of the picture, at least 300 px) a bubble can be narrow: Glim's face
+// makes room for the words then. The bubbles never get taller than the picture: they scroll.
+const narrow = computed(() => docked.value && stageWidth.value - Math.max(stageWidth.value * 0.54, 300) - 36 < 300)
 // Glim's answer stays on the picture until "Got it" (unless it's drawn there as a scene)
 const answered = computed(() => !listening.value && !!props.answer && !!props.question && !props.answer.visual)
 const pointing = computed(() => (listening.value || props.answer ? (props.question?.pointedAt ?? null) : null))
@@ -143,7 +147,8 @@ const hint = computed(() => {
         </span>
         <Transition name="fade" mode="out-in">
           <span v-if="readingLine" key="r" class="rounded-full bg-[#3fe0d0] px-3.5 py-2 text-[13px] font-black text-[#0b1d28]">Reading line {{ readingLine }}</span>
-          <span v-else-if="listening" key="l" class="rounded-full bg-sun px-3.5 py-2 text-[13px] font-black text-ink">Listening</span>
+          <span v-else-if="status === 'listening'" key="l" class="rounded-full bg-sun px-3.5 py-2 text-[13px] font-black text-ink">Listening</span>
+          <span v-else-if="listening" key="t" class="rounded-full bg-violet px-3.5 py-2 text-[13px] font-black text-white">Thinking</span>
         </Transition>
       </div>
 
@@ -158,26 +163,30 @@ const hint = computed(() => {
       <span v-if="flash" :key="flash" class="pointer-events-none absolute inset-0 bg-white" style="animation: shutter 420ms ease-out both" aria-hidden="true" />
 
       <Transition name="fade">
-        <div v-if="listening" class="absolute bottom-3 left-3 z-20 flex items-end gap-3 transition-all duration-500" :style="{ right: docked ? 'calc(54% + 24px)' : '12px' }">
-          <Mascot :size="58" />
-          <div class="relative flex-1 rounded-3xl rounded-bl-md bg-white/95 px-5 py-3 shadow-xl backdrop-blur" aria-live="polite">
+        <div v-if="listening" class="pointer-events-none absolute inset-y-3 left-3 z-20 flex items-end gap-3 transition-all duration-500" :style="{ right: docked ? 'calc(54% + 24px)' : '12px' }">
+          <Mascot v-if="!narrow" :size="58" class="shrink-0" />
+          <div class="pointer-events-auto relative max-h-full min-w-0 flex-1 overflow-y-auto rounded-3xl rounded-bl-md bg-white/95 px-5 py-3 shadow-xl backdrop-blur" aria-live="polite">
             <p :lang="question?.lang" class="text-[19px] font-black leading-snug">{{ question?.text && question.text !== '…' ? `« ${question.text} »` : status !== 'listening' ? (status === 'answering' ? 'Reading your paper…' : 'Listening') : listenStatus.phase === 'speaking' ? 'I’m listening…' : listenStatus.phase === 'writing' ? 'Writing down your question…' : 'I’m listening: what’s your question?' }}</p>
             <p v-if="question?.about" class="mt-0.5 flex flex-wrap items-center gap-2 text-[14px] font-semibold text-ink-2">About <MathTex :latex="titleTex(question.about)" class="text-[18px] text-ink" /></p>
             <p v-else class="mt-0.5 text-[14px] font-semibold text-ink-2">{{ question?.pointedAt ? `About line ${question.pointedAt.partId}${question.pointedAt.token ? `, the ${question.pointedAt.token}` : ''}` : status === 'answering' ? 'Glim is looking at the photo' : status === 'listening' ? (listenStatus.model === 'loading' ? `Getting my ears ready, the first time only: ${Math.round(listenStatus.progress * 100)}%` : 'Say it out loud. Stop talking and I’ll send it with the photo') : 'Point at your paper while you ask' }}</p>
-            <span v-if="asking" class="absolute right-5 top-4 flex h-6 items-end gap-1" aria-hidden="true">
-              <span v-for="(h, i) in [8, 18, 24, 12, 20, 9]" :key="i" class="w-1 rounded-sm bg-tangerine transition-[height] duration-100" :class="status === 'listening' ? '' : 'wave-bar'" :style="{ height: status === 'listening' ? `${4 + h * Math.min(1, listenStatus.level * (0.6 + ((i * 7) % 5) / 6))}px` : `${h}px`, animationDelay: `${i * 90}ms` }" />
+            <!-- the sound of the voice while listening; while Glim thinks, a spinner -->
+            <span v-if="asking && status === 'listening'" class="absolute right-5 top-4 flex h-6 items-end gap-1" aria-hidden="true">
+              <span v-for="(h, i) in [8, 18, 24, 12, 20, 9]" :key="i" class="w-1 rounded-sm bg-tangerine transition-[height] duration-100" :style="{ height: `${4 + h * Math.min(1, listenStatus.level * (0.6 + ((i * 7) % 5) / 6))}px` }" />
             </span>
+            <span v-else class="absolute right-5 top-4 size-5 animate-spin rounded-full border-[3px] border-violet-soft border-t-violet" aria-hidden="true" />
           </div>
         </div>
       </Transition>
 
       <Transition name="fade">
-        <div v-if="answered" class="absolute bottom-3 left-3 z-20 flex items-end gap-3 transition-all duration-500" :style="{ right: docked ? 'calc(54% + 24px)' : '12px' }">
-          <Mascot :size="58" />
-          <div class="relative flex-1 rounded-3xl rounded-bl-md bg-white/95 px-5 py-3 shadow-xl backdrop-blur" aria-live="polite">
-            <p v-if="question?.about" class="flex flex-wrap items-center gap-2 text-[13px] font-black text-violet">About <MathTex :latex="titleTex(question.about)" class="text-[16px] text-ink" /></p>
-            <p :lang="answer?.lang" class="text-[17px] font-bold leading-snug">{{ answer?.text }}</p>
-            <p v-if="answer?.translation" lang="en" class="mt-0.5 text-[13px] text-ink-2">{{ answer.translation }}</p>
+        <div v-if="answered" class="pointer-events-none absolute inset-y-3 left-3 z-20 flex items-end gap-3 transition-all duration-500" :style="{ right: docked ? 'calc(54% + 24px)' : '12px' }">
+          <Mascot v-if="!narrow" :size="58" class="shrink-0" />
+          <div class="pointer-events-auto relative flex max-h-full min-w-0 flex-1 flex-col rounded-3xl rounded-bl-md bg-white/95 shadow-xl backdrop-blur" aria-live="polite">
+            <div class="min-h-0 overflow-y-auto px-5 py-3">
+              <p v-if="question?.about" class="flex flex-wrap items-center gap-2 text-[13px] font-black text-violet">About <MathTex :latex="titleTex(question.about)" class="max-w-full overflow-x-auto text-[16px] text-ink" /></p>
+              <p :lang="answer?.lang" class="text-[17px] font-bold leading-snug">{{ answer?.text }}</p>
+              <p v-if="answer?.translation" lang="en" class="mt-0.5 text-[13px] text-ink-2">{{ answer.translation }}</p>
+            </div>
             <button type="button" class="absolute -top-3 right-4 rounded-full bg-violet px-3 py-1 text-[13px] font-black text-white shadow" @click="dismissAnswer">Got it</button>
           </div>
         </div>

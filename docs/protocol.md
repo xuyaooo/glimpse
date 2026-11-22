@@ -17,9 +17,9 @@ Maths travels as LaTeX: `\frac{3}{4}+\frac{1}{2}=\frac{4}{6}`. Fractions are nev
 | `confirm_reply` | `partId`, `ok` | the child answered "Did you write this?" |
 | `pick_exercise` | `id` | the child chose the next similar exercise |
 | `ask_start` / `ask_end` | | manual trigger for a question (the engine normally detects pointing + speech itself) |
-| `question_typed` | `text`, `partId?` | development: ask without speech |
+| `question_typed` | `text`, `partId?` | development: ask without speech. Without `partId` the question is about the line whose maths it quotes, or the newest wrong line for "why is it wrong?"; an empty question is ignored |
 | `point` | `image`, `x?`, `y?`, `text?` | the child points at the paper and holds still (hand tracking in the browser), or presses Ask: the whole frame (never cropped), the fingertip (0-1 in that frame) and the typed question. The engine reads the whole page with the OCR model, then the tutor gets the photo (fingertip marked), the text and the question |
-| `session_end` | | "End session" |
+| `session_end` | | "End session". Once ended, a session only takes `set_age`, `subject` and `pick_exercise` (new work is refused: start a new session); `session_end` again sends the same summary |
 
 ## Engine → web
 

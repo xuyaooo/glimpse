@@ -5,6 +5,15 @@ import { state } from './engine'
 import { sampleSummaries, STYLE_LABEL, type StudentSummary } from './mock'
 import type { TeachStyle } from './types'
 
+/**
+ * A summary's "next" without its own "Next time," (it is shown after a "Next time:" label). New
+ * summaries come without it; ones saved before still start with it.
+ */
+export function nextTip(next: string | undefined | null) {
+  const t = String(next ?? '').replace(/^\s*(?:next time|la prochaine fois|nächstes mal|la prossima volta)\s*[,:]?\s*/i, '')
+  return t.charAt(0).toUpperCase() + t.slice(1)
+}
+
 const clock = (t: number) => new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
 
 export function liveSummary(): StudentSummary | null {

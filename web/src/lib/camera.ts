@@ -52,8 +52,9 @@ export function useCamera() {
     }
     status.value = 'starting'
     try {
+      // `exact`: Chrome would open its own preferred camera instead of an `ideal` one
       const s = await navigator.mediaDevices.getUserMedia({
-        video: { deviceId: id ? { ideal: id } : undefined, width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30 } },
+        video: { deviceId: id ? { exact: id } : undefined, width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30 } },
         audio: false,
       })
       if (my !== gen) {
@@ -76,8 +77,10 @@ export function useCamera() {
       remember(deviceId.value)
     } catch (e) {
       if (my !== gen) return
-      const name = e instanceof DOMException ? e.name : ''
+      const name = e instanceof DOMException || e instanceof Error ? e.name : String((e as { name?: unknown } | null)?.name ?? '') // OverconstrainedError may be neither
       const text = e instanceof Error ? e.message : ''
+      // The camera picked (or remembered) isn't plugged in any more: open the usual one instead.
+      if (id && (name === 'OverconstrainedError' || name === 'NotFoundError')) return start('')
       if (name === 'NotAllowedError' && /system/i.test(text)) {
         // Chrome on macOS: the site is allowed but the Mac blocks the browser.
         status.value = 'denied'

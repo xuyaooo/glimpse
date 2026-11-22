@@ -2,14 +2,14 @@
 //   state' = await handle(state, clientEvent, emit)
 // State is plain JSON so it can live in a database between serverless calls; `emit` sends
 // engine events back (streamed over HTTP, or a WebSocket).
-import { F, toPlain, parseSum, plainToLatex, checkSum, checkEquation, diagnose, BUGS, reduce, fstr, sumLatex, evaluate } from './maths.js'
+import { F, toPlain, parseSum, plainToLatex, checkSum, checkEquation, diagnose, BUGS, reduce, fstr, sumLatex, evaluate, lcm } from './maths.js'
 import { explainWrongSum, chooseStyle, similarExercises, hint, styleNames, exerciseId } from './teach.js'
 import { readFrame, stripMath } from './reader.js'
 import { decodeJpeg, drawRing, resizeRgba, toJpegBase64 } from '../images.js'
 import { complete } from '../llm.js'
-import { sceneFor, texToPlain, compile } from './scenes.js'
+import { sceneFor, texToPlain, compile, toExpr } from './scenes.js'
 import { REVIEW_VERSION, suggestReview } from './review.js'
-import { DOMAIN_KINDS } from './domains.js'
+import { DOMAIN_KINDS, SUBJECT_OF } from './domains.js'
 
 export const ENGINE_VERSION = 'hackathon-engine-1'
 
@@ -208,10 +208,12 @@ function addLine(s, { raw, box, key, crop }, emit) {
 // writes the feedback. Exact checking has the last word on fraction sums and arithmetic, and a
 // wrong fraction sum gets a computed picture (pies / bars / worked example).
 
+// (the example has no numbers of its own: models copied "halves and thirds" from a worked
+// example into hints about 2/5 + 1/3)
 const TUTOR_INTRO = `You are Glim, a kind, patient maths tutor. The student is often a child: use short, simple words and match the level of the maths on the page.
-Be really helpful and concrete: use the actual numbers and expressions from the page. A hint gives the next step: the rule or fact to use and how it applies here, so the student can do that step; the full solution is shown separately, step by step.
-Example, for 1/2 + 1/3 = ?
-- good hint: "Halves and thirds are different sizes, so make them the same: both fit into sixths. 1/2 = 3/6. What is 1/3 in sixths?"
+Be really helpful and concrete: use the actual numbers and expressions from the page, never numbers from somewhere else. A hint gives the next step: the rule or fact to use and how it applies here, so the student can do that step; the full solution is shown separately, step by step.
+Example, for a sum of two fractions with different bottoms:
+- good hint: the rule, then the student's own fractions: "These pieces are different sizes, so make the bottoms the same first: <the first fraction> = <the same fraction with the common bottom>. What is <the second fraction> with that bottom?"
 - bad hint (too vague): "Think about fractions."`
 
 // The same tutor for the other subjects on the desk ("Choose a practice")
@@ -409,7 +411,83 @@ function exactVerdict(plain) {
 }
 function rightHint(s, plain) {
   const sum = parseSum(plain || '')
-  return sum && checkSum(sum.a, sum.b, sum.ans) === 'unsimplified' ? say(s, 'right_unsimplified', { ans: fstr(sum.ans), simple: fshow(reduce(sum.ans)) }) : say(s, 'right')
+  const v = sum && checkSum(sum.a, sum.b, sum.ans)
+  if (v === 'unsimplified') return say(s, 'right_unsimplified', { ans: fstr(sum.ans), simple: fshow(reduce(sum.ans)) })
+  // different bottoms: what was done, computed (never the model's words about "the tops and the bottoms")
+  if (v === 'correct' && sum.a.d !== sum.b.d) {
+    const d = lcm(sum.a.d, sum.b.d)
+    return say(s, 'right_common', { a: fstr(sum.a), b: fstr(sum.b), as: fstr(F(sum.a.n * (d / sum.a.d), d)), bs: fstr(F(sum.b.n * (d / sum.b.d), d)), sum: fstr(F(sum.a.n * (d / sum.a.d) + sum.b.n * (d / sum.b.d), d)) })
+  }
+  return say(s, 'right')
+}
+
+// ---------- equations solved line by line ----------
+//
+// An equation in one letter that is linear (3x + 4x = 400, 5x = 400, x = 80): its solution, worked
+// out by evaluating both sides (no algebra system), or null. solved: the line is the answer (x = 80).
+function linearRoot(line) {
+  let e
+  try {
+    e = toExpr(stripMath(String(line || ''))).replace(/\s+/g, '')
+  } catch {
+    return null
+  }
+  const sides = e.split('=')
+  if (sides.length !== 2 || !sides[0] || !sides[1]) return null
+  const letters = [...new Set(e.match(/[a-zA-Z]+/g) || [])]
+  if (letters.length !== 1 || letters[0].length !== 1) return null
+  const v = letters[0]
+  try {
+    const L = compile(sides[0], [v])
+    const R = compile(sides[1], [v])
+    const g = (x) => L(x) - R(x)
+    const g0 = g(0)
+    const a = g(1) - g0
+    const fits = [2, -3, 0.5, 7].every((x) => Math.abs(g(x) - (a * x + g0)) <= 1e-9 * Math.max(1, Math.abs(g(x)), Math.abs(a * x), Math.abs(g0)))
+    if (!fits || !Number.isFinite(a) || Math.abs(a) < 1e-12) return null
+    const solved = sides.some((x) => x === v) && sides.some((x) => !x.includes(v))
+    return { v, x: -g0 / a, solved }
+  } catch {
+    return null
+  }
+}
+// The model can call a step right that changes the answer (seen live: 3x + 4x = 400, then
+// 5x = 400 marked right). Each new line of an equation is checked against the line above it, for
+// the same x: a line whose solution is not the one above is a slip, and the lines after it, which
+// follow from it, carry the slip (x = 80 is not the answer to 3x + 4x = 400). A line that is the
+// answer (x = 80) ends the exercise: the next one starts another.
+// -> partId -> { exercise (its first line: what the steps solve), carried } for the lines marked so
+function checkSteps(read1) {
+  const same = (p, q) => Math.abs(p - q) <= 1e-6 * Math.max(1, Math.abs(p), Math.abs(q))
+  const slips = new Map()
+  let chain = null // { v, first, prev, text }: the solutions of the exercise's first line and of the line above
+  for (const r of read1) {
+    const root = r.part.plain && exactVerdict(r.part.plain) !== null ? null : linearRoot(r.part.raw || r.part.latex)
+    // a numbered line ("2) 3x - 1 = 8") is another exercise
+    if (!root || /^\s*(?:\(?\d{1,2}[.)]|\(?[a-h]\)|q\s*\d+\s*[:.)])\s+/i.test(stripMath(r.part.raw || r.part.latex))) chain = null
+    if (!root) continue
+    // only the model's "correct" is overruled (a line it was unsure of may be another exercise)
+    if (chain && chain.v === root.v && r.changed) {
+      if (!same(root.x, chain.prev)) {
+        if (r.part.verdict === 'correct') r.part = { ...r.part, verdict: 'wrong', note: "made a slip: this line doesn't follow from the line above" }
+        if (r.part.verdict === 'wrong') slips.set(r.part.id, { exercise: chain.text, carried: false })
+      } else if (!same(root.x, chain.first) && r.part.verdict === 'correct') {
+        r.part = { ...r.part, verdict: 'wrong', note: 'carried on a slip from a line above' }
+        slips.set(r.part.id, { exercise: chain.text, carried: true })
+      }
+    }
+    chain = root.solved ? null : chain && chain.v === root.v ? { ...chain, prev: root.x } : { v: root.v, first: root.x, prev: root.x, text: r.part.raw || r.part.latex }
+  }
+  return slips
+}
+// "line 2" in the tutor's words is a line of the OCR transcript, which also has printed lines:
+// said with the number the student sees on the line (its part id), or not at all
+function renumber(text, ids) {
+  return String(text || '').replace(/\b(lines?)\s+(\d+)((?:\s*(?:,|and|&)\s*\d+)*)/gi, (m, word, first, rest) => {
+    const nums = [first, ...(rest.match(/\d+/g) || [])].map((n) => ids.get(Number(n)))
+    if (nums.some((n) => n === undefined)) return m
+    return `${word} ${nums.length > 1 ? `${nums.slice(0, -1).join(', ')} and ${nums.at(-1)}` : nums[0]}`
+  })
 }
 
 async function analyzePage(s, read, frameDataUrl, emit) {
@@ -432,12 +510,13 @@ For every transcribed line return:
 - "n": its number;
 - "kind": "work" (${SUBJECT_WORK[s.subject] ?? SUBJECT_WORK.maths}) or "printed" (headings, names, page numbers, printed instructions);
 - "verdict": "correct", "wrong", "unfinished" (it ends with "=" or has no result yet) or "unsure" (it can't be checked);
-- "note", only when wrong: the mistake, short, phrased to follow "you", e.g. "added the tops and the bottoms".${SUBJECT_CHECK[s.subject] ?? ''}
+- "note", only when wrong: the mistake, short, phrased to follow "you", e.g. "forgot to carry the ten".${SUBJECT_CHECK[s.subject] ?? ''}
+For a line that carries on the line above (the next step of the same exercise), check that it follows from it: the same answer must still be true.
 Then "feedback": what Glim says to the student about their LAST line of work, in ${LANG_NAME[lang]}, at most 2 short sentences.
 - correct: say so briefly, and what could come next;
 - wrong: say what went wrong and how to fix it;
-- unfinished: the next step, concretely (the rule or fact to use and how it applies here, e.g. "1/(1+x) is the derivative of ln(1+x), so...").
-Write maths in the feedback as plain text that can be read aloud (e.g. 1/(1+x), x², 3/4), not LaTeX.${lang !== 'en' ? '\nAlso "feedback_en": the same in English.' : ''}`,
+- unfinished: the next step, concretely: the rule or fact to use and how it applies to this line, with its own numbers.
+Write maths in the feedback as plain text that can be read aloud (e.g. x², 3/4), not LaTeX. Don't mention line numbers (the student doesn't see the transcript's numbers): quote the maths instead.${lang !== 'en' ? '\nAlso "feedback_en": the same in English.' : ''}`,
         },
         { role: 'user', content: `OCR transcription of the paper:\n${numbered(read.lines)}${newest >= 0 ? `\n\nThe student's newest line is the lowest one they wrote: probably line ${newest + 1}, "${read.lines[newest]}". The feedback is about that line only.` : ''}`, images: [read.image] },
       ],
@@ -456,7 +535,7 @@ Write maths in the feedback as plain text that can be read aloud (e.g. 1/(1+x), 
   read.lines.forEach((line, i) => {
     const j = judged.find((l) => l?.n === i + 1)
     const kind = j?.kind || (looksWork(s, line) ? 'work' : 'printed')
-    if (kind === 'work') work.push({ line, j })
+    if (kind === 'work') work.push({ line, j, n: i + 1 })
   })
   if (!work.length) {
     emit({ type: 'hint', hint: say(s, 'no_new_line') })
@@ -501,6 +580,7 @@ Write maths in the feedback as plain text that can be read aloud (e.g. 1/(1+x), 
   })
   for (; next < sheet.stored.length; next++) order.push(sheet.stored[next].id)
   s.sheets[sheet.index] = order
+  const slips = checkSteps(read1)
 
   const last = read1[read1.length - 1].part // the newest line: what the tutor's feedback is about
   const changed = read1.filter((x) => x.changed).map((x) => x.part)
@@ -551,23 +631,32 @@ Write maths in the feedback as plain text that can be read aloud (e.g. 1/(1+x), 
   const target = focus ?? last
   await sendTopic(s, target.raw || target.latex, emit)
 
-  // What Glim says about the newest line. When the exact check marked it differently from the
-  // tutor model, the model's words would contradict the mark: a computed hint is said instead.
-  const fb = typeof out.json?.feedback === 'string' ? plainReply(out.json.feedback) : ''
-  const fbEn = typeof out.json?.feedback_en === 'string' ? plainReply(out.json.feedback_en) : ''
+  // What Glim says about the newest line. The tutor model's words are kept unless they can be
+  // wrong where the code knows better:
+  // - a sum of fractions is checked and taught exactly: the computed words are said (the model's
+  //   praised "adding the tops and the bottoms" on a right answer, and taught 2/5 + 1/3 with halves);
+  // - another line the exact check (or the steps of an equation) marked differently from the
+  //   model: its words would contradict the mark.
+  const ids = new Map(read1.map((x, k) => [work[k].n, x.part.id]))
+  const fb = typeof out.json?.feedback === 'string' ? renumber(plainReply(out.json.feedback), ids) : ''
+  const fbEn = typeof out.json?.feedback_en === 'string' ? renumber(plainReply(out.json.feedback_en), ids) : ''
   let said = fb ? { text: fb, lang, ...(lang !== 'en' && fbEn ? { translation: fbEn } : {}) } : null
   const exact = exactVerdict(last.plain)
   const modelVerdict = read1[read1.length - 1].j?.verdict
-  if (exact && (modelVerdict !== exact || !said)) said = exact === 'correct' ? rightHint(s, last.plain) : (focus === last && teachHint) || say(s, 'wrong_generic')
+  const fractions = Boolean(parseSum(last.plain || '')) || fractionAttempt(last.plain)
+  if (exact && (fractions || modelVerdict !== exact || !said)) said = exact === 'correct' ? rightHint(s, last.plain) : (focus === last && teachHint) || say(s, 'wrong_generic')
+  else if (!exact && slips.has(last.id) && modelVerdict !== 'wrong') said = say(s, slips.get(last.id).carried ? 'step_carried' : 'step_slip')
   if (said) emit({ type: 'hint', hint: said })
 
-  // the history keeps every line read (and its photo); the newest one also keeps what Glim said
-  const lineRecord = (p, h) => remember(s, { kind: 'line', ref: `line:${p.id}`, data: { partId: p.id, latex: p.latex, verdict: p.verdict, note: p.note ?? null, hint: h, photo: thumb } })
+  // the history keeps every line read (and its photo); the newest one also keeps what Glim said.
+  // A line keeps the time it was written (read again later, it stays in its place in the history).
+  const lineRecord = (p, h) => remember(s, { kind: 'line', ref: `line:${p.id}`, at: p.at, data: { partId: p.id, latex: p.latex, verdict: p.verdict, note: p.note ?? null, hint: h, photo: thumb } })
   for (const part of changed) if (part !== last) lineRecord(part, null)
   if (changed.includes(last) || said) lineRecord(last, said?.text ?? null)
 
-  // the line is unfinished or wrong: work the whole exercise out, step by step
-  if (target.note === 'not finished yet' || target.verdict === 'wrong') await sendSteps(s, target.raw || target.latex, emit, { image: read.image })
+  // the line is unfinished or wrong: work the whole exercise out, step by step (a slip in an
+  // equation: the exercise it came from, not the slip)
+  if (target.note === 'not finished yet' || target.verdict === 'wrong') await sendSteps(s, slips.get(target.id)?.exercise ?? (target.raw || target.latex), emit, { image: read.image })
 }
 
 // ---------- the whole solution, step by step ----------
@@ -860,7 +949,10 @@ const TOPIC = {
 async function sendTopic(s, exercise, emit) {
   const laya = await askLaya('/decide', { text: exercise }, 1000)
   const sc = sceneFor({ exercise, kind: laya?.kind, age: s.age })
-  const kind = sc?.kind ?? (laya && laya.kind !== 'none' && laya.probability >= 0.5 ? laya.kind : null)
+  // Laya's guess alone (no animation could be built to check it) only within the session's subject:
+  // a worded maths problem was seen sent to "Electric circuits" or "States of matter"
+  const guess = laya && laya.kind !== 'none' && laya.probability >= 0.5 && TOPIC[laya.kind] && (SUBJECT_OF[laya.kind] ?? 'maths') === (s.subject || 'maths') ? laya.kind : null
+  const kind = sc?.kind ?? guess
   if (!kind) return
   s.kindsSeen = [...new Set([...(s.kindsSeen || []), kind])]
   if (s.topic?.kind !== kind) {
@@ -988,9 +1080,35 @@ const MENTION = {
   quadratic: /quadratic|parabola/i, system: /simultaneous|system|two equations/i, graph: /graph|function/i, trig: /\btrig|\bsin(?:e|es)?\b|\bcos(?:ine)?\b|\btan(?:gent)?\b/i, limit: /\blimit/i,
   derivative: /derivative|slope|tangent/i, area: /integral|area under|calculus/i, chance: /probab|chance/i, combinations: /combination|choos|factorial/i, tree: /tree|probab/i,
   syllables: /syllable|\bbeats?\b|clap/i, phonics: /phonic|sounds?\b|digraph/i, spelling: /spell/i, plural: /plural/i, sentence: /sentence|punctuat|capital/i,
-  units: /\bunits?\b|conver|metre|gram|litre/i, speed: /speed|distance/i, density: /densit|float|sink/i, circuit: /circuit|voltage|current|resist|ohm/i, states: /solid|liquid|\bgas\b|melt|boil|states? of matter/i, food_chain: /food chain|predator|producer|consumer/i,
+  units: /\bunits?\b|conver|metre|\b(?:kilo|milli)?grams?\b|litre/i, speed: /speed|distance/i, density: /densit|float|sink/i, circuit: /circuit|voltage|current|resist|ohm/i, states: /solid|liquid|\bgas\b|melt|boil|states? of matter/i, food_chain: /food chain|predator|producer|consumer/i,
 }
 const str = (v) => (typeof v === 'string' && v.trim() ? v.trim() : '')
+// "Next time, we will..." under the summary's own "Next time" label: said once
+const NEXT_TIME = /^\s*(?:next time|la prochaine fois|nächstes mal|la prossima volta)\s*[,:]?\s*/i
+const dropNextTime = (t) => {
+  const x = String(t || '').replace(NEXT_TIME, '')
+  return x ? x[0].toUpperCase() + x.slice(1) : x
+}
+// "Keep the bottom number the same and only add the tops" is only right when the bottoms are
+// already the same. Said about a session with a sum of fractions with different bottoms, it
+// teaches the mistake itself (seen in 3 of 3 summaries for 1/2 + 1/3 = 2/5).
+const KEEP_BOTTOM = /\bkeep(?:s|ing)?\s+(?:the\s+)?(?:same\s+)?(?:bottom|denominator)s?(?:\s+numbers?)?(?:\s+the\s+same)?\b|\bonly\s+add\s+the\s+top/i
+const MAKES_SAME = /\b(?:make|making|change|changing|turn|turning|common|same size|first)\b/i
+const wrongRule = (t) => KEEP_BOTTOM.test(t) && !MAKES_SAME.test(t)
+// A mistake with a sum of fractions, in the engine's words, with the student's own line as the
+// example and the right way computed: "Make the bottoms the same first: 1/2 + 1/3 = 3/6 + 2/6 = 5/6."
+function fractionMistake(m, sum) {
+  const d = lcm(sum.a.d, sum.b.d)
+  const [p, q] = [sum.a.n * (d / sum.a.d), sum.b.n * (d / sum.b.d)]
+  const right = fshow(reduce(F(p + q, d)))
+  const line = `${fstr(sum.a)} + ${fstr(sum.b)} = ${fstr(sum.ans)}`
+  const what = `${mistakeWords(m, 'en').what.replace(/\.$/, '')}: ${line}.`
+  const tip =
+    sum.a.d === sum.b.d
+      ? `The pieces are already the same size: add the tops and keep the bottom, ${fstr(sum.a)} + ${fstr(sum.b)} = ${fstr(F(sum.a.n + sum.b.n, d))}${right !== fstr(F(sum.a.n + sum.b.n, d)) ? ` = ${right}` : ''}.`
+      : `Make the bottoms the same first, then add the tops: ${fstr(sum.a)} + ${fstr(sum.b)} = ${p}/${d} + ${q}/${d} = ${p + q}/${d}${right !== `${p + q}/${d}` ? ` = ${right}` : ''}.`
+  return { what, tip }
+}
 
 async function summarize(s, emit) {
   const lang = LANG_NAME[s.lang] ? s.lang : 'en'
@@ -1048,6 +1166,7 @@ Only use what is in the session below; don't invent results. When you describe a
               s.questions.length ? `Questions:\n${s.questions.map((q) => `- "${q.text}"${q.about ? ` about ${q.about}` : ''}`).join('\n')}` : '',
               s.topics?.length ? `Worked solutions shown for: ${s.topics.map(texToPlain).join('; ')}` : '',
               Object.values(s.misconceptions || {}).length ? `Misconceptions seen: ${Object.values(s.misconceptions).map((m) => `${m.name} (${m.status})`).join(', ')}` : '',
+              lines.some((p) => parseSum(p.plain || '') && parseSum(p.plain).a.d !== parseSum(p.plain).b.d) ? 'For fractions with different bottoms, the right way is to make the bottoms the same first, then add the tops (never "keep the bottom the same").' : '',
               lang !== 'en' ? `Write every field in ${LANG_NAME[lang]}, not in English.` : '',
             ].filter(Boolean).join('\n\n'),
           },
@@ -1065,11 +1184,26 @@ Only use what is in the session below; don't invent results. When you describe a
           .map((m) => (typeof m === 'string' ? { what: str(m), tip: '' } : m && typeof m === 'object' ? { what: str(m.what), tip: str(m.tip) } : null))
           .filter((m) => m?.what)
         ideas = (Array.isArray(j.review) ? j.review : []).filter((r) => r && typeof r === 'object').map((r) => ({ exercise: str(r.exercise), why: str(r.why) })).filter((r) => r.exercise).slice(0, 4)
-        text = { title: str(j.title), praise: str(j.praise) || text.praise, practised: practised.slice(0, 4), mistakes: mistakes.slice(0, 4), next: str(j.next) || text.next, for_adults: str(j.for_adults) || text.for_adults }
+        const counted = text
+        text = { title: str(j.title), praise: str(j.praise) || text.praise, practised: practised.slice(0, 4), mistakes: mistakes.slice(0, 4), next: dropNextTime(str(j.next)) || text.next, for_adults: str(j.for_adults) || text.for_adults }
         written = lang
         if (lang === 'en') {
           for (const k of ['title', 'praise', 'next', 'for_adults']) text[k] = neutralize(text[k], s.name)
           text.mistakes = text.mistakes.map((m) => ({ what: neutralize(m.what, s.name), tip: neutralize(m.tip, s.name) }))
+          // the mistakes with fractions the engine diagnosed are said in its own words (the right
+          // way computed), and the model's rule for fractions is checked where it can be wrong
+          const sums = lines.filter((p) => p.verdict === 'wrong').map((p) => parseSum(p.plain || '')).filter(Boolean)
+          const known = []
+          for (const m of Object.values(s.misconceptions || {})) {
+            const sum = sums.find((x) => (diagnose(x.a, x.b, x.ans)[0]?.id ?? 'unknown') === m.id)
+            if (sum && !known.some((k) => k.what === fractionMistake(m, sum).what)) known.push(fractionMistake(m, sum))
+          }
+          if (known.length) text.mistakes = [...known, ...text.mistakes.filter((m) => !/fraction|bottom|top|denominator|numerator/i.test(`${m.what} ${m.tip}`))].slice(0, 4)
+          if (lines.some((p) => parseSum(p.plain || '') && parseSum(p.plain).a.d !== parseSum(p.plain).b.d)) {
+            for (const k of ['praise', 'for_adults']) if (wrongRule(text[k])) text[k] = counted[k]
+            if (wrongRule(text.next)) text.next = 'Practise making the bottoms the same before adding fractions.'
+            text.mistakes = text.mistakes.map((m) => (wrongRule(m.tip) ? { ...m, tip: 'Make the bottoms the same first, then add the tops.' } : m))
+          }
           // every kind of maths recognised today is listed (counted, not left to the model), and
           // never cut to make room for the model's topics
           const missing = [...new Set((s.kindsSeen || []).filter((k) => TOPIC[k] && !text.practised.some((p) => MENTION[k]?.test(p))).map((k) => TOPIC[k]))]
@@ -1105,8 +1239,8 @@ function aboutTex(exercise) {
 
 // History: records saved to the database after each event (server/app.js -> store.js).
 // `ref` makes a record replaceable: a line read again updates its record.
-function remember(s, { kind, ref, data }) {
-  ;(s.history ||= []).push({ kind, ref: `${s.id}:${ref}`, at: Date.now(), data })
+function remember(s, { kind, ref, data, at }) {
+  ;(s.history ||= []).push({ kind, ref: `${s.id}:${ref}`, at: Number.isFinite(at) ? at : Date.now(), data })
 }
 
 // ---------- pointing: "what about this?" ----------
@@ -1193,6 +1327,22 @@ Return:
 function target(s) {
   return [...s.parts].reverse().find((p) => p.verdict === 'wrong') ?? s.parts[s.parts.length - 1]
 }
+// The line a typed question is about: the one whose maths it quotes ("why is 3/4 + 1/2 not 4/6?"),
+// else, for a question about "this" (why is it wrong? how do I do it?), the newest wrong line;
+// a question about something else (the capital of France, 7 times 8) is about no line.
+const ABOUT_THIS = /\b(?:this|that|it|its|wrong|right|correct|mistake|why|how|help|explain|answer|line|next|step|fraction|fractions|sum|do|did|check)\b/i
+function partAsked(s, text) {
+  const bits = String(text || '').match(/[\d(][\d\s+\-*/×÷:=().^]*[\d)]/g) || []
+  const keys = bits.map(lineNorm).filter((k) => /\d[+\-*/:^]\(?\d/.test(k))
+  if (keys.length) {
+    const p = [...s.parts].reverse().find((x) => {
+      const pk = partKey(x)
+      return keys.some((k) => k === pk || k === lhsOf(pk) || (lhsOf(k) && lhsOf(k) === lhsOf(pk)))
+    })
+    return p ?? null // maths that is not on the page: no line of it
+  }
+  return ABOUT_THIS.test(String(text || '')) ? target(s) : null
+}
 
 function pointedAt(p) {
   if (!p) return undefined
@@ -1200,22 +1350,24 @@ function pointedAt(p) {
   return { partId: p.id, token: fr ? fr[2] : '' }
 }
 
-async function answerQuestion(s, text, partId, emit) {
-  const p = (partId && s.parts.find((x) => x.id === partId)) || target(s)
+async function answerQuestion(s, text, partId, emit, { asked = false } = {}) {
+  const p = (partId && s.parts.find((x) => x.id === partId)) || (asked ? partAsked(s, text) : target(s))
   const q = { text, lang: s.lang, final: true, pointedAt: pointedAt(p) }
   emit({ type: 'question', question: q })
   emit({ type: 'status', state: 'answering' })
   let answer
-  if (!p) {
+  if (!p && !s.parts.length) {
     answer = s.lang === 'fr' ? { text: 'Écris d’abord quelque chose, puis montre-le-moi.', lang: 'fr', translation: 'Write something first, then point at it.' } : { text: 'Write something first, then point at it.', lang: 'en' }
   } else {
-    const sum = parseSum(p.plain || '')
+    const sum = p && parseSum(p.plain || '')
     const lang = LANG_NAME[s.lang] ? s.lang : 'en'
-    const context = [
-      `The child (age 8-11) wrote: ${p.plain || p.raw || p.latex}`,
-      `Verdict: ${p.verdict}${p.note ? ` (${p.note})` : ''}.`,
-      sum ? `The right result is ${fstr(F(sum.a.n * sum.b.d + sum.b.n * sum.a.d, sum.a.d * sum.b.d))} (unreduced).` : '',
-    ].join('\n')
+    const context = p
+      ? [
+          `The child (age 8-11) wrote: ${p.plain || p.raw || p.latex}`,
+          `Verdict: ${p.verdict}${p.note ? ` (${p.note})` : ''}.`,
+          sum ? `The right result is ${fstr(F(sum.a.n * sum.b.d + sum.b.n * sum.a.d, sum.a.d * sum.b.d))} (unreduced).` : '',
+        ].join('\n')
+      : 'The question is not about a line on the paper.'
     try {
       const out = await complete('tutor', {
         messages: [
@@ -1326,9 +1478,16 @@ export async function handle(state, e, emit) {
     case 'ask_end':
       await answerQuestion(s, ASK_DEFAULT[s.lang] || ASK_DEFAULT.en, null, emit)
       return s
-    case 'question_typed':
-      await answerQuestion(s, e.text, e.partId, emit)
+    case 'question_typed': {
+      // an empty question is no question (it is not answered, saved or counted)
+      const text = typeof e.text === 'string' ? e.text.trim() : ''
+      if (!text) {
+        emit({ type: 'status', state: 'watching' })
+        return s
+      }
+      await answerQuestion(s, text, e.partId, emit, { asked: true })
       return s
+    }
     case 'point': {
       // pointing at the paper (and maybe a typed question): photo + OCR of the whole page -> LLM
       if (!e.image) return s
@@ -1337,6 +1496,12 @@ export async function handle(state, e, emit) {
       return s
     }
     case 'session_end':
+      // ended already: its summary again, never a new one (that would reset what was done since)
+      if (s.ended && s.summary) {
+        emit({ type: 'summary', summary: s.summary })
+        emit({ type: 'status', state: 'idle' })
+        return s
+      }
       emit({ type: 'status', state: 'thinking' })
       await summarize(s, emit)
       s.ended = true

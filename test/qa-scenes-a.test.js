@@ -145,7 +145,8 @@ test('limits that converge slowly, overflow, or do not exist', () => {
   // the ones that already worked
   assert.equal(R('\\lim_{x \\to 0} \\frac{\\sin x}{x}'), '1')
   assert.equal(R('\\lim_{x \\to 0} \\frac{1}{x^2}'), '\\infty')
-  assert.ok(R('\\lim_{x \\to \\infty} (1 + 1/x)^x').startsWith('2.718'))
+  // e can only be written rounded: with ≈, never "= 2.718"
+  assert.equal(R('\\lim_{x \\to \\infty} (1 + 1/x)^x'), '\\approx 2.718')
 })
 
 test('one-sided limits are written one-sided, with a dot where f is defined', () => {

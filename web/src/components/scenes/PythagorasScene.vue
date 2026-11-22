@@ -31,7 +31,8 @@ const squares = computed(() => show.value !== 'triangle')
 // the side being found stays '?' until the answer, in the sum at the bottom too
 const area = (side: 'a' | 'b' | 'c') => (s.value.missing === side && show.value !== 'answer' ? '?' : fmt(s.value[side] * s.value[side]))
 // With the squares the drawing is made smaller; when a square would still poke out of the
-// picture (or over the sum at the bottom), it is scaled and moved to fit instead.
+// picture (or over the sum at the bottom), it is scaled and moved to fit instead, with a margin
+// so the camera drift of the video card doesn't cut a corner off.
 const fit = computed(() => {
   const ps = [sqA.value, sqB.value, sqC.value].join(' ').split(' ').map((p) => p.split(',').map(Number))
   ps.push([O.value.x - s.value.a * k.value - 50, O.value.y], [(O.value.x + Q.value.x) / 2, O.value.y + s.value.b * k.value + 36]) // the side labels
@@ -39,10 +40,10 @@ const fit = computed(() => {
   const ys = ps.map((p) => p[1])
   const box = { x0: Math.min(...xs), x1: Math.max(...xs), y0: Math.min(...ys), y1: Math.max(...ys) }
   const usual = { sc: 0.78, tx: 110.4, ty: 34 } // translate(40, -10) scale(0.78) around (320, 200)
-  const inside = usual.tx + box.x0 * usual.sc >= 6 && usual.tx + box.x1 * usual.sc <= 634 && usual.ty + box.y0 * usual.sc >= 6 && usual.ty + box.y1 * usual.sc <= 362
+  const inside = usual.tx + box.x0 * usual.sc >= 14 && usual.tx + box.x1 * usual.sc <= 626 && usual.ty + box.y0 * usual.sc >= 14 && usual.ty + box.y1 * usual.sc <= 362
   if (inside) return usual
-  const sc = Math.min(0.78, 628 / (box.x1 - box.x0), 356 / (box.y1 - box.y0))
-  return { sc, tx: 320 - ((box.x0 + box.x1) / 2) * sc, ty: 184 - ((box.y0 + box.y1) / 2) * sc }
+  const sc = Math.min(0.78, 612 / (box.x1 - box.x0), 348 / (box.y1 - box.y0))
+  return { sc, tx: 320 - ((box.x0 + box.x1) / 2) * sc, ty: 188 - ((box.y0 + box.y1) / 2) * sc }
 })
 </script>
 

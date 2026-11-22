@@ -29,16 +29,19 @@ const toNext = computed(() => (points.value % PER_LEVEL) / PER_LEVEL)
   >
     <RouterLink :to="{ name: 'home' }" class="flex items-center gap-2 text-white no-underline lg:flex-col lg:gap-1">
       <Mascot :size="58" />
-      <span class="text-[24px] font-black tracking-[-0.01em]">Glimpse</span>
+      <span class="text-[24px] font-black tracking-[-0.01em] max-sm:hidden">Glimpse</span>
     </RouterLink>
 
-    <nav aria-label="Main" class="flex gap-1 lg:flex-col lg:gap-2">
+    <!-- on a narrow screen the row scrolls sideways: every item can be reached. Over the Alps
+         (a short window puts Settings where the mountains are drawn) -->
+    <nav aria-label="Main" class="relative z-10 flex min-w-0 gap-1 max-lg:overflow-x-auto lg:flex-col lg:gap-2">
       <RouterLink
         v-for="item in items"
         :key="item.label"
         :to="item.to"
         :aria-current="item.active ? 'page' : undefined"
-        class="group flex min-h-12 items-center gap-3.5 rounded-full px-4 text-[16px] font-bold text-white no-underline transition-all duration-300"
+        :aria-label="item.label"
+        class="group flex min-h-12 shrink-0 items-center gap-3.5 rounded-full px-4 text-[16px] font-bold text-white no-underline transition-all duration-300 max-sm:px-3"
         :class="item.active ? 'bg-white/22 shadow-[inset_0_1px_0_rgb(255_255_255/0.3),0_10px_20px_-12px_rgb(0_0_0/0.4)] lg:mr-[-4px]' : 'text-white/90 hover:translate-x-1 hover:bg-white/10'"
         :style="item.active ? { background: 'linear-gradient(90deg, rgb(255 255 255 / 0.28), rgb(255 255 255 / 0.14))' } : undefined"
       >
@@ -51,7 +54,7 @@ const toNext = computed(() => (points.value % PER_LEVEL) / PER_LEVEL)
         </svg>
         <span class="max-lg:hidden">{{ item.label }}</span>
       </RouterLink>
-      <button type="button" class="group flex min-h-12 items-center gap-3.5 rounded-full px-4 text-left text-[16px] font-bold text-white/90 transition-all duration-300 hover:translate-x-1 hover:bg-white/10" @click="ui.settingsOpen = true">
+      <button type="button" class="group flex min-h-12 shrink-0 items-center gap-3.5 rounded-full px-4 text-left text-[16px] font-bold text-white/90 transition-all duration-300 hover:translate-x-1 hover:bg-white/10 max-sm:px-3" aria-label="Settings" @click="ui.settingsOpen = true">
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="shrink-0 transition-transform duration-300 group-hover:rotate-45"><circle cx="12" cy="12" r="3" /><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1" /></svg>
         <span class="max-lg:hidden">Settings</span>
       </button>

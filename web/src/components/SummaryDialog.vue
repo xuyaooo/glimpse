@@ -9,6 +9,7 @@ import Mascot from './Mascot.vue'
 import MathTex from './MathTex.vue'
 import { titleTex } from '@/lib/latex'
 import { localSummary, startSession, state } from '@/lib/engine'
+import { nextTip } from '@/lib/records'
 import { speakAuto, stopSpeaking } from '@/lib/speech'
 import { ui } from '@/lib/ui'
 
@@ -122,7 +123,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey, true))
             </div>
           </div>
 
-          <p class="rounded-2xl bg-lagoon-mist px-4 py-3 text-[16px] font-bold"><span class="font-black text-lagoon-deep">Next time: </span>{{ s.next }}</p>
+          <p class="rounded-2xl bg-lagoon-mist px-4 py-3 text-[16px] font-bold"><span class="font-black text-lagoon-deep">Next time: </span>{{ nextTip(s.next) }}</p>
 
           <div v-if="s.review?.length" class="flex flex-col gap-2 rounded-2xl border-2 border-tangerine-soft p-3.5">
             <div class="flex flex-wrap items-center gap-2">

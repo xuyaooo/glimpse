@@ -7,7 +7,7 @@ let shownSession = -1
 <script setup lang="ts">
 // Open camera: a whole window. Left, the live camera with the tutor drawing on it.
 // Right, the digital side: what was read, whether it's right, why, and what's going on.
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, toRaw, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import Mascot from '@/components/Mascot.vue'
 import CameraView from '@/components/scan/CameraView.vue'
@@ -27,7 +27,7 @@ import { settings } from '@/lib/settings'
 import { subjectById } from '@/lib/subjects'
 import { ui } from '@/lib/ui'
 import { useStepPlayer } from '@/lib/useStepPlayer'
-import type { EngineState } from '@/lib/types'
+import type { EngineState, Hint } from '@/lib/types'
 
 const router = useRouter()
 const route = useRoute()
@@ -56,6 +56,22 @@ const live = computed(() => !paper.value && cam.status.value === 'live')
 const selected = computed(() => state.parts.find((p) => p.id === ui.selectedPartId) ?? state.parts[state.parts.length - 1] ?? null)
 const teaching = computed(() => (selected.value ? (state.teachings.filter((t) => t.partId === selected.value!.id).pop() ?? null) : null))
 const hint = computed(() => (selected.value ? (state.hintsByPart[selected.value.id] ?? null) : null))
+// What Glim said that isn't about a line ("I can't see a new line yet", the tutor couldn't be
+// reached): shown in "What I read" (with the voice off it would be missed) until a new read
+// starts, a line comes, or the child picks a line.
+const notice = ref<Hint | null>(null)
+watch(
+  () => state.hint,
+  (h) => (notice.value = h && !Object.values(state.hintsByPart).some((x) => toRaw(x) === toRaw(h)) ? h : null),
+)
+watch(
+  () => [state.parts.length, ui.selectedPartId],
+  () => (notice.value = null),
+)
+watch(
+  () => state.status,
+  (st) => st === 'reading' && (notice.value = null),
+)
 const player = useStepPlayer(
   () => `${selected.value?.id}-${selected.value?.verdict}-${teaching.value?.iteration ?? 0}`,
   () => (teaching.value ? teaching.value.steps.length - 1 : 0),
@@ -135,6 +151,9 @@ async function ask(tip: Pt | null, { continuous = false } = {}) {
     // The page was left, or the session finished, while the child was talking: send nothing.
     if (!alive || ui.summaryOpen) return dropQuestion(before)
     sayDeferred()
+    // Hold to talk (or A) let go without a word heard: a stray tap asks nothing. Pointing with a
+    // finger still asks about the photo ("Can you help me with this?").
+    if (continuous && !text.trim()) return dropQuestion(before)
   }
   pointing = true
   pointAt(image, tip, text)
@@ -224,10 +243,12 @@ function finish() {
   endSession()
 }
 
-// The photo each line was read from, sent by the engine (new line, or a line that changed).
+// The photo each line was read from, sent by the engine (new line, or a line that changed), or
+// already there (the session's lines brought back after a reload).
 watch(
   () => state.parts.map((p) => p.crop),
   () => state.parts.forEach((p) => p.crop && (ui.crops[p.id] = p.crop)),
+  { immediate: true },
 )
 watch(
   () => state.teaching,
@@ -427,6 +448,7 @@ const STATUS: Record<string, string> = {
         :step="player.step.value"
         :crop="selected ? (ui.crops[selected.id] ?? null) : null"
         :hint="hint"
+        :notice="notice"
         @step="player.go"
         @replay="player.play"
         @select="(id) => (ui.selectedPartId = id)"

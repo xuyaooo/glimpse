@@ -8,6 +8,8 @@ defineProps<{ parts: WrittenPart[]; selectedId: number | null; teachings: Teachi
 defineEmits<{ select: [id: number] }>()
 
 const BADGE = { correct: 'bg-right-mark', wrong: 'bg-wrong-mark', reading: 'bg-lagoon-bright', unsure: 'bg-[#e0a21a]' }
+// a line saved from an earlier session (it has `meta`) shows its mark: its id is only internal
+const MARK = { correct: '✓', wrong: '✗', reading: '…', unsure: '?' }
 const fixFor = (teachings: Teaching[], id: number) => {
   const t = teachings.filter((x) => x.partId === id).pop()
   return t?.steps[t.steps.length - 1]
@@ -31,7 +33,7 @@ const fixFor = (teachings: Teaching[], id: number) => {
         >
           <div class="flex items-start gap-3">
             <img v-if="meta?.[p.id]?.photo" :src="meta[p.id].photo!" alt="" class="mt-0.5 h-10 w-14 shrink-0 rounded-lg object-cover ring-2" :class="p.verdict === 'correct' ? 'ring-right-mark' : p.verdict === 'wrong' ? 'ring-wrong-mark' : 'ring-[#e0a21a]'" />
-            <span v-else class="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full text-[13px] font-black text-white transition-transform group-hover:scale-110" :class="BADGE[p.verdict]">{{ p.id }}</span>
+            <span v-else class="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full text-[13px] font-black text-white transition-transform group-hover:scale-110" :class="BADGE[p.verdict]">{{ meta?.[p.id] ? MARK[p.verdict] : p.id }}</span>
             <div class="flex min-w-0 flex-1 flex-col gap-1.5">
               <span class="flex items-center gap-2 text-[14px] font-bold text-ink-2">
                 {{ meta?.[p.id] ? meta[p.id].when : p.exerciseId ? 'A similar exercise' : 'Today' }}

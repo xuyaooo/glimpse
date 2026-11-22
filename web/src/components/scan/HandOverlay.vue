@@ -2,7 +2,7 @@
 // The hands the camera sees, drawn over the video: a light skeleton for each hand and, when a
 // finger points, a ring at the fingertip that fills up while it's held still. Full = asked.
 // While the microphone listens the ring stays full; while Glim thinks, pointing does nothing.
-import { computed } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { HAND_BONES, type Pt } from '@/lib/hands'
 
 const props = defineProps<{ vw: number; vh: number; hands: Pt[][]; tip: Pt | null; dwell: number; asking: boolean; listening?: boolean }>()
@@ -10,8 +10,21 @@ const props = defineProps<{ vw: number; vh: number; hands: Pt[][]; tip: Pt | nul
 const unit = computed(() => Math.min(props.vw, props.vh) / 100)
 const ring = computed(() => unit.value * 4.2)
 const circumference = computed(() => 2 * Math.PI * ring.value)
-const label = computed(() => (props.listening ? 'Say your question…' : props.asking ? 'Thinking…' : props.dwell >= 1 ? 'Got it!' : 'Hold still to ask'))
-const filled = computed(() => (props.listening ? 1 : props.asking ? 0 : props.dwell))
+// "Got it!" for a moment when the ring closes (the question is taken), before "Say your
+// question…". A finger still on the same spot after the answer asks nothing more: it has to move.
+const gotIt = ref(false)
+let timer = 0
+watch(
+  () => props.dwell >= 1,
+  (full) => {
+    window.clearTimeout(timer)
+    gotIt.value = full
+    if (full) timer = window.setTimeout(() => (gotIt.value = false), 900)
+  },
+)
+onBeforeUnmount(() => window.clearTimeout(timer))
+const label = computed(() => (gotIt.value ? 'Got it!' : props.listening ? 'Say your question…' : props.asking ? 'Thinking…' : props.dwell >= 1 ? 'Move to ask again' : 'Hold still to ask'))
+const filled = computed(() => (gotIt.value || props.listening ? 1 : props.asking || props.dwell >= 1 ? 0 : props.dwell))
 // keep the label on the picture
 const labelX = computed(() => (props.tip ? Math.min(props.vw - unit.value * 16, Math.max(unit.value * 16, props.tip.x * props.vw)) : 0))
 const labelY = computed(() => (props.tip ? Math.max(unit.value * 12, props.tip.y * props.vh - ring.value - unit.value * 3) : 0))

@@ -12,7 +12,8 @@ import { speak } from '@/lib/speech'
 import type { Hint, Teaching, WrittenPart } from '@/lib/types'
 import { youNote } from '@/lib/useWork'
 
-defineProps<{ selected: WrittenPart | null; teaching: Teaching | null; step: number; crop: string | null; hint: Hint | null }>()
+// notice: what Glim said that isn't about a line (no new line seen, the tutor not reached)
+defineProps<{ selected: WrittenPart | null; teaching: Teaching | null; step: number; crop: string | null; hint: Hint | null; notice?: Hint | null }>()
 defineEmits<{ step: [n: number]; replay: []; select: [id: number] }>()
 
 const BADGE = { correct: 'bg-right-mark', wrong: 'bg-wrong-mark', reading: 'bg-lagoon-bright', unsure: 'bg-[#e0a21a]' }
@@ -35,6 +36,17 @@ const BADGE = { correct: 'bg-right-mark', wrong: 'bg-wrong-mark', reading: 'bg-l
           <span v-else-if="selected.verdict === 'reading'" class="rounded-full bg-lagoon-mist px-3 py-1 text-[14px] font-black text-lagoon">Reading</span>
           <span v-else class="rounded-full bg-[#fff4d6] px-3 py-1 text-[14px] font-black text-[#8a5a00]">Check it</span>
         </template>
+      </div>
+
+      <div v-if="notice" class="mt-3 flex items-start gap-3 rounded-2xl bg-[#fff8e6] px-4 py-3" aria-live="polite" style="animation: rise 400ms both">
+        <div class="flex-1">
+          <p class="text-[12px] font-black text-[#8a5a00]">Glim says</p>
+          <p :lang="notice.lang" class="text-[16px] font-bold leading-snug">{{ notice.text }}</p>
+          <p v-if="notice.translation" lang="en" class="mt-0.5 text-[13px] text-ink-2">{{ notice.translation }}</p>
+        </div>
+        <button type="button" aria-label="Hear it" title="Hear it" class="flex size-9 shrink-0 items-center justify-center rounded-xl bg-white text-[#8a5a00] shadow-sm" @click="speak(notice.text, notice.lang)">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5L6 9H3v6h3l5 4z" /><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13" /></svg>
+        </button>
       </div>
 
       <div v-if="!selected" class="mt-3 flex flex-col items-center gap-2 rounded-2xl border-2 border-dashed border-line px-4 py-8 text-center">
@@ -67,8 +79,8 @@ const BADGE = { correct: 'bg-right-mark', wrong: 'bg-wrong-mark', reading: 'bg-l
         <p v-if="selected.verdict === 'wrong' && selected.note" class="rounded-2xl bg-wrong-bg px-4 py-2.5 text-[15px] font-bold text-wrong">{{ youNote(selected.note) }}</p>
         <p v-else-if="selected.verdict === 'unsure' && selected.note" class="rounded-2xl bg-[#fff4d6] px-4 py-2.5 text-[15px] font-bold text-[#7a4f00]">{{ selected.note.charAt(0).toUpperCase() + selected.note.slice(1) }}.</p>
 
-        <!-- what the tutor says about this line (also spoken) -->
-        <div v-if="hint" class="flex items-start gap-3 rounded-2xl bg-lagoon-mist px-4 py-3" aria-live="polite">
+        <!-- what the tutor says about this line (also spoken); a newer word from Glim shows above instead -->
+        <div v-if="hint && !notice" class="flex items-start gap-3 rounded-2xl bg-lagoon-mist px-4 py-3" aria-live="polite">
           <div class="flex-1">
             <p class="text-[12px] font-black text-lagoon-deep">Glim says</p>
             <p :lang="hint.lang" class="text-[16px] font-bold leading-snug">{{ hint.text }}</p>

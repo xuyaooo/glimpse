@@ -60,14 +60,18 @@ try {
   console.log('\nEmpty sessions and bad requests\n')
   const empty = `empty-${Date.now()}`
   await send({ type: 'session_start', student: 'fail', name: 'Ada', lang: 'en', subject: 'maths' }, empty)
+  r = await send({ type: 'cut_part' }, empty)
+  check('reading with no picture: a hint', last(r.events, 'hint')?.hint?.text, last(r.events, 'hint')?.hint?.text)
   const t = Date.now()
   r = await send({ type: 'session_end' }, empty)
   const es = last(r.events, 'summary')?.summary
   check('ending an empty session: a friendly summary at once', es?.title && es.lines === 0 && Date.now() - t < 2000, es && `"${es.title}" in ${Date.now() - t} ms`)
-  r = await send({ type: 'cut_part' }, empty)
-  check('reading with no picture: a hint', last(r.events, 'hint')?.hint?.text, last(r.events, 'hint')?.hint?.text)
+  r = await send({ type: 'part_typed', text: '3/4 + 1/4 = 1' }, empty)
+  check('work after the end: refused (409), the summary stays true', r.status === 409)
+  r = await send({ type: 'session_end' }, empty)
+  check('ending it again: the same summary', last(r.events, 'summary')?.summary?.at === es?.at)
   r = await send({ type: 'no_such_event' }, empty)
-  check('unknown event: ignored', r.status === 200)
+  check('unknown event: 400', r.status === 400)
   r = await send({ type: 'cut_part' }, 'bad id!')
   check('bad session id: 400', r.status === 400)
   const nobody = await fetch(`${ENGINE}/api/engine`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
@@ -75,7 +79,9 @@ try {
   const unknown = await fetch(`${ENGINE}/api/history/sessions/nothing-here`).then((x) => x.json())
   check('history of an unknown session: empty', Array.isArray(unknown) && !unknown.length)
   r = await send({ type: 'part_typed', text: '2 + 2 = 4' }, `fresh-${Date.now()}`)
-  check('event without session_start: a session is made', last(r.events, 'part')?.part?.verdict === 'correct')
+  // (in memory, as here, the session may be in another instance: the event gets a session of its own;
+  // with a real database it is a 404, see test/qa-G3b-server-rest.test.js)
+  check('event without session_start (database in memory): a session is made', last(r.events, 'part')?.part?.verdict === 'correct')
 } finally {
   child.kill()
 }

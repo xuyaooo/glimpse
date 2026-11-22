@@ -138,9 +138,9 @@ const showSticky = computed(() => !!sticky.value && (props.part?.verdict !== 'wr
         <path d="M9 20h6v1a1 1 0 0 1-1 1h-4a1 1 0 0 1-1-1z" fill="#5b6b84" />
       </svg>
       <p class="min-w-0 text-[15px] leading-snug text-ink">
-        <b class="text-marker">Tip:</b>
-        <template v-if="hint"> <span :lang="hint.lang">{{ hint.text }}</span><span v-if="hint.translation" lang="en" class="block text-[13px] text-ink-2">{{ hint.translation }}</span></template>
-        <template v-else> Lift your pencil after each line. Glimpse checks it and explains it here.</template>
+        <b class="text-marker">Tip:</b>{{ ' ' }}
+        <template v-if="hint"><span :lang="hint.lang">{{ hint.text }}</span><span v-if="hint.translation" lang="en" class="block text-[13px] text-ink-2">{{ hint.translation }}</span></template>
+        <template v-else>Lift your pencil after each line. Glimpse checks it and explains it here.</template>
       </p>
     </div>
   </section>

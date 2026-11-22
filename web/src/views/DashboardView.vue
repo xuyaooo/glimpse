@@ -161,7 +161,7 @@ const AVATAR = ['linear-gradient(160deg,#18a99c,#0b6962)', 'linear-gradient(160d
           <section aria-label="AI usage" class="card stagger flex min-w-0 flex-col gap-2 p-5" style="--d: 460ms">
             <h3 class="text-lg font-black">AI usage today</h3>
             <p class="text-[15px] leading-relaxed">
-              <b>{{ current.ai.localReads }}</b> lines read on this laptop, <b>{{ current.ai.bigCalls }}</b> sent to a big model, costing <b>${{ current.ai.cost.toFixed(4) }}</b>.
+              <b>{{ current.ai.localReads }}</b> {{ current.ai.localReads === 1 ? 'line' : 'lines' }} read on this laptop, <b>{{ current.ai.bigCalls }}</b> sent to a big model, costing <b>${{ current.ai.cost.toFixed(4) }}</b>.
             </p>
             <p class="text-[13px] font-semibold text-ink-2">Only a cropped line is ever sent, and only when neither the local reader nor the child's confirmation could settle it.</p>
           </section>

@@ -16,10 +16,24 @@ export const DOMAIN_LEVEL = { syllables: 1, phonics: 1, plural: 1, spelling: 1, 
 export const WORD_KINDS = ['syllables', 'phonics', 'spelling', 'plural']
 
 const round = (v, d = 6) => Math.round(v * 10 ** d) / 10 ** d
+// A number as written: 1 000 000 (a whole number in groups of three, never 1.000 × 10^6), and only
+// a huge number with decimals as a power of ten (1.5 × 10^6)
 const fmt = (v) => {
   if (!Number.isFinite(v)) return String(v)
   const r = round(v, 4)
-  return Math.abs(r) >= 1e6 ? r.toExponential(3).replace('e+', ' × 10^') : String(r)
+  if (Math.abs(r) < 1e6) return String(r)
+  if (Number.isInteger(r) && Math.abs(r) < 1e15) return String(r).replace(/\B(?=(\d{3})+$)/g, ' ')
+  return r.toExponential(3).replace(/\.?0+e/, 'e').replace('e+', ' × 10^')
+}
+// A value exactly when it is a fraction with a small bottom (4/3 Ω), else rounded with "about"
+function exactly(v) {
+  if (Number.isInteger(round(v, 9))) return { plain: fmt(round(v, 9)), tex: fmt(round(v, 9)), exact: true }
+  if (Math.abs(v - round(v, 4)) < 1e-9) return { plain: fmt(v), tex: fmt(v), exact: true }
+  for (let d = 2; d <= 100; d++) {
+    const n = Math.round(v * d)
+    if (Math.abs(n / d - v) < 1e-9 * Math.max(1, Math.abs(v))) return { plain: `${n}/${d}`, tex: `\\frac{${n}}{${d}}`, exact: true }
+  }
+  return { plain: `about ${fmt(round(v, 2))}`, tex: `\\approx ${fmt(round(v, 2))}`, exact: false }
 }
 const tex = (t) => `\\text{${String(t).replace(/[{}\\$%#&_^~]/g, (c) => (c === '%' ? '\\%' : c === '$' ? '\\$' : c === '#' ? '\\#' : c === '&' ? '\\&' : c === '_' ? '\\_' : ''))}}`
 const clean = (text) =>
@@ -429,11 +443,13 @@ function buildCircuit({ V, I, resistors = [], arrangement = 'single' }, skin) {
   if (known !== 2 || [V, I, R].some((x) => x !== null && x !== undefined && !(x > 0)) || resistors.length > 6) return null
   const want = V === null || V === undefined ? 'V' : I === null || I === undefined ? 'I' : 'R'
   const res = round(want === 'V' ? I * R : want === 'I' ? V / R : V / I, 4)
-  const rWord = resistors.length > 1 ? (arrangement === 'parallel' ? `In parallel: 1/R = ${resistors.map((r) => `1/${fmt(r)}`).join(' + ')}, so R = ${fmt(round(R, 4))} Ω.` : `In series the resistances add up: ${resistors.map(fmt).join(' + ')} = ${fmt(R)} Ω.`) : null
+  // (in parallel R is often a fraction: 2 Ω and 4 Ω make 4/3 Ω, never "1.3333 Ω")
+  const Rx = R === null ? null : exactly(R)
+  const rWord = resistors.length > 1 ? (arrangement === 'parallel' ? `In parallel: 1/R = ${resistors.map((r) => `1/${fmt(r)}`).join(' + ')}, so R = ${Rx.plain} Ω.` : `In series the resistances add up: ${resistors.map(fmt).join(' + ')} = ${fmt(R)} Ω.`) : null
   const stages = [
     { caption: 'In a circuit, the voltage pushes the current through the resistance: V = I × R.', show: 'circuit', math: 'V = I \\times R' },
     ...(rWord ? [{ caption: rWord, show: 'resistors', math: arrangement === 'parallel' ? `\\frac{1}{R} = ${resistors.map((r) => `\\frac{1}{${fmt(r)}}`).join(' + ')}` : `R = ${resistors.map(fmt).join(' + ')} = ${fmt(R)}\\,\\Omega` }] : []),
-    { caption: want === 'I' ? 'We want the current: I = V ÷ R.' : want === 'V' ? 'We want the voltage: V = I × R.' : 'We want the resistance: R = V ÷ I.', show: 'formula', math: want === 'I' ? `I = \\frac{${fmt(V)}}{${fmt(round(R, 4))}}` : want === 'V' ? `V = ${fmt(I)} \\times ${fmt(round(R, 4))}` : `R = \\frac{${fmt(V)}}{${fmt(I)}}` },
+    { caption: want === 'I' ? 'We want the current: I = V ÷ R.' : want === 'V' ? 'We want the voltage: V = I × R.' : 'We want the resistance: R = V ÷ I.', show: 'formula', math: want === 'I' ? (Rx.exact && !/frac/.test(Rx.tex) ? `I = \\frac{${fmt(V)}}{${Rx.tex}}` : `I = ${fmt(V)} \\div ${Rx.exact ? Rx.tex : fmt(round(R, 4))}`) : want === 'V' ? `V = ${fmt(I)} \\times ${Rx.exact ? Rx.tex : fmt(round(R, 4))}` : `R = \\frac{${fmt(V)}}{${fmt(I)}}` },
     { caption: `${want === 'I' ? 'The current is' : want === 'V' ? 'The voltage is' : 'The resistance is'} ${fmt(res)} ${want === 'I' ? 'amps' : want === 'V' ? 'volts' : 'ohms'}.`, show: 'flow', math: `${want} = ${fmt(res)}\\,${want === 'I' ? '\\text{A}' : want === 'V' ? '\\text{V}' : '\\Omega'}` },
   ]
   return { kind: 'circuit', skin, V: want === 'V' ? res : V, I: want === 'I' ? res : I, R: want === 'R' ? res : round(R, 4), resistors, arrangement, unknown: want, stages, resultTex: `${want} = ${fmt(res)}\\,${want === 'I' ? '\\text{A}' : want === 'V' ? '\\text{V}' : '\\Omega'}` }
@@ -468,6 +484,12 @@ function buildStates({ substance, T }, skin) {
 // Food chains: who eats whom, from the producer (a plant) to the top
 const PRODUCERS = /^(the\s+)?(sun|grass|plants?|trees?|leaf|leaves|seeds?|algae|phytoplankton|flowers?|corn|wheat|berries|fruits?|lettuce|carrots?|kelp|seaweed|nectar|acorns?|cabbages?|clover|oak|nuts?)$/i
 const ANIMAL = { grass: '🌿', plant: '🌱', plants: '🌱', leaves: '🍃', leaf: '🍃', seeds: '🌾', algae: '🟢', rabbit: '🐇', fox: '🦊', mouse: '🐭', owl: '🦉', snake: '🐍', hawk: '🦅', eagle: '🦅', caterpillar: '🐛', bird: '🐦', frog: '🐸', fly: '🪰', insect: '🐞', deer: '🦌', wolf: '🐺', lion: '🦁', zebra: '🦓', fish: '🐟', shark: '🦈', seal: '🦭', bear: '🐻', squirrel: '🐿️', acorns: '🌰', nuts: '🌰', cow: '🐄', human: '🧑', sun: '☀️', snail: '🐌', hedgehog: '🦔', worm: '🪱', beetle: '🪲', spider: '🕷️', berries: '🫐', carrot: '🥕', lettuce: '🥬', corn: '🌽', tree: '🌳', flower: '🌸', flowers: '🌸', krill: '🦐', whale: '🐋', penguin: '🐧', grasshopper: '🦗', lizard: '🦎', cat: '🐱', bee: '🐝', nectar: '🌼', kelp: '🌿', seaweed: '🌿', 'sea urchin': '🦔', 'sea otter': '🦦' }
+// "the mice eat", "the owl eats": a plural name (mice, owls, seeds, algae) takes the plural verb
+const PLURAL = /^(?:mice|geese|lice|people|children|teeth|feet|algae|oxen|cattle)$/
+const isPlural = (name) => {
+  const w = name.split(' ').pop()
+  return PLURAL.test(w) || (/s$/.test(w) && !/(?:ss|us|is|ous)$/.test(w))
+}
 function buildFoodChain({ chain }, skin) {
   const names = chain.map((c) => c.toLowerCase().replace(/^(the|a|an)\s+/, '').trim()).filter(Boolean)
   if (names.length < 2 || names.length > 7 || names.some((n) => !/^[a-z][a-z ]{2,24}$/.test(n))) return null
@@ -482,8 +504,8 @@ function buildFoodChain({ chain }, skin) {
   const items = [...(hasSun ? [{ name: 'sun', role: 'energy source', emoji: '☀️' }] : []), ...living.map((n, i) => ({ name: n, role: role(i), emoji: ANIMAL[n] ?? ANIMAL[n.replace(/s$/, '')] ?? null }))]
   const stages = [
     { caption: 'A food chain shows who eats whom. The arrow points the way the energy goes: from the food to the eater.', show: 'start', math: tex(items.map((x) => x.name).join(' → ')) },
-    ...items.slice(0, -1).map((x, i) => ({ caption: x.role === 'energy source' ? `The sun gives its energy to the ${items[i + 1].name}.` : `The ${items[i + 1].name} eats the ${x.name}: the energy goes from the ${x.name} to the ${items[i + 1].name}.`, show: `link${i}`, math: tex(`${x.name} → ${items[i + 1].name}`) })),
-    { caption: `${items.filter((x) => x.role !== 'energy source').map((x) => `The ${x.name} is ${/^[aeiou]/.test(x.role) ? 'an' : 'a'} ${x.role}`).join('. ')}.`, show: 'roles', math: tex(items.map((x) => x.name).join(' → ')) },
+    ...items.slice(0, -1).map((x, i) => ({ caption: x.role === 'energy source' ? `The sun gives its energy to the ${items[i + 1].name}.` : `The ${items[i + 1].name} ${isPlural(items[i + 1].name) ? 'eat' : 'eats'} the ${x.name}: the energy goes from the ${x.name} to the ${items[i + 1].name}.`, show: `link${i}`, math: tex(`${x.name} → ${items[i + 1].name}`) })),
+    { caption: `${items.filter((x) => x.role !== 'energy source').map((x) => (isPlural(x.name) ? `The ${x.name} are ${x.role}s` : `The ${x.name} is ${/^[aeiou]/.test(x.role) ? 'an' : 'a'} ${x.role}`)).join('. ')}.`, show: 'roles', math: tex(items.map((x) => x.name).join(' → ')) },
   ]
   return { kind: 'food_chain', skin, items, stages, resultTex: items.map((x) => tex(x.name)).join(' \\to ') }
 }

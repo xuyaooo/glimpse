@@ -26,8 +26,8 @@ const cookies = (p: { cx: number; cy: number; r: number }) => {
     return { x: p.cx + Math.cos(ang) * p.r * ring, y: p.cy + Math.sin(ang) * p.r * ring }
   })
 }
-// dot array
-const cell = computed(() => Math.min(300 / s.value.a, 520 / s.value.b, 44))
+// dot array, all of it above the result (its pill starts at y = 330)
+const cell = computed(() => Math.min(270 / s.value.a, 520 / s.value.b, 44))
 const gx = (c: number) => 320 + (c - (s.value.b - 1) / 2) * cell.value
 const gy = (r: number) => 190 + (r - (s.value.a - 1) / 2) * cell.value
 // "3 rows" to the left of the dots; written upwards when it would not fit there
@@ -36,6 +36,9 @@ const rowsLabel = computed(() => {
   const fits = x - (String(s.value.a).length + 5) * 12.5 >= 4
   return fits ? { x, up: false } : { x: gx(0) - cell.value / 2 - 17, up: true }
 })
+// the result's pill, as wide as its text (12 × 12 = 144 is wider than 3 × 4 = 12)
+const result = computed(() => `${s.value.a} × ${s.value.b} = ${s.value.result}`)
+const pillW = computed(() => Math.max(180, result.value.length * 16 + 36))
 </script>
 
 <template>
@@ -65,8 +68,8 @@ const rowsLabel = computed(() => {
       <text v-if="stage >= 1" x="320" :y="gy(0) - cell" font-size="22" font-weight="800" fill="#9fb3c8" text-anchor="middle">{{ s.b }} in each row</text>
     </template>
     <g v-if="stage >= 2" class="scene-pop" :style="{ animationDelay: `${kid ? s.a * 0.45 + 0.4 : 0.6}s` }">
-      <rect x="230" y="330" width="180" height="56" rx="28" :fill="kid ? '#fff' : '#3fe0d0'" :stroke="kid ? '#0f7f76' : 'none'" stroke-width="4" />
-      <text x="320" y="359" font-size="30" font-weight="900" :fill="kid ? '#0b6962' : '#0b1d28'" text-anchor="middle" dominant-baseline="central">{{ s.a }} × {{ s.b }} = {{ s.result }}</text>
+      <rect :x="320 - pillW / 2" y="330" :width="pillW" height="56" rx="28" :fill="kid ? '#fff' : '#3fe0d0'" :stroke="kid ? '#0f7f76' : 'none'" stroke-width="4" />
+      <text x="320" y="359" font-size="30" font-weight="900" :fill="kid ? '#0b6962' : '#0b1d28'" text-anchor="middle" dominant-baseline="central">{{ result }}</text>
     </g>
   </svg>
 </template>

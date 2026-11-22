@@ -58,6 +58,10 @@ export function toPlain(text) {
     .replace(/\\times|×|\\cdot|·/g, '*')
     .replace(/\\div/g, '÷') // becomes ":" after the label, so "3\div 5" is never "exercise 3"
     .replace(/[−–]/g, '-')
+    // "6 x 7": an x between two numbers is a times sign (also before a negative number written
+    // apart, "3 x -2"; "3x -2" stays an expression in x)
+    .replace(/(\d)\s*[xX]\s*(?=\d)/g, '$1*')
+    .replace(/(\d)\s+[xX]\s+(?=-\d)/g, '$1*')
   // a leading exercise label: "1) ", "2. ", "a) ", "(c) ", "b: "
   const label = s.match(/^\s*\(?(?:\d+[).]|[a-zA-Z][).:])\s+/)
   if (label) return finishPlain(s.slice(label[0].length))

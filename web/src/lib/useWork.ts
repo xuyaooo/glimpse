@@ -27,7 +27,10 @@ const key = (t: unknown) => String(t ?? '').replace(/\\text\{([^}]*)\}/g, '$1').
 /** "You …" said about a line from its note. The tutor's own notes may already start with "you" and end with a full stop or a question mark. */
 export function youNote(note: string) {
   const n = note.trim().replace(/^you\s+/i, '')
-  return `You ${n}${/[.?!]$/.test(n) ? '' : '.'}`
+  const end = /[.?!]$/.test(n) ? '' : '.'
+  // a note that is already a sentence about the work ("This answer is wrong...") is not "You This..."
+  if (/^(?:this|that|these|those|the|your|it|its|there|here|a|an|i|we)\b/i.test(n)) return `${n.charAt(0).toUpperCase()}${n.slice(1)}${end}`
+  return `You ${n}${end}`
 }
 
 // The same mistake, worded differently from one summary to the next (the engine's misconceptions)
@@ -51,7 +54,14 @@ export function useWork() {
 
   async function load() {
     const id = state.student?.id
-    if (!id || state.connection === 'demo') return
+    if (!id) return
+    // The scripted demo saves nothing: its Practise again is the summary of the session just finished.
+    if (state.connection === 'demo') {
+      const s = state.summary
+      reviews.value = s?.review?.length ? [{ ref: `demo-${s.at}`, sessionId: currentSessionId(), at: s.at, title: s.title, items: s.review }] : []
+      loadedFor.value = id
+      return
+    }
     loading.value = true
     try {
       const [r, rv] = await Promise.all([fetch(`/api/history?student=${encodeURIComponent(id)}&limit=500`), fetch(`/api/review?student=${encodeURIComponent(id)}`)])
@@ -73,6 +83,7 @@ export function useWork() {
     if (!item) return
     const was = !!item.done
     item.done = done
+    if (state.connection === 'demo') return // nothing to save it to
     try {
       const r = await fetch('/api/review/done', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ref, id, done }) })
       if (!r.ok) throw new Error(String(r.status))

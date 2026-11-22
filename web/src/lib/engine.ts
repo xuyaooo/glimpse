@@ -64,6 +64,11 @@ export const state = reactive({
   steps: null as WorkedSteps | null,
   /** How the session went, once it has ended. */
   summary: null as SessionSummary | null,
+  /**
+   * End session was pressed: the engine takes no new work in this session (409). A new line or
+   * question starts a new session for the same child first (see fresh()).
+   */
+  ended: false,
   /** What kind of maths the child is doing, as recognised (null: nothing read yet). */
   topic: null as { kind: string; label: string } | null,
 
@@ -94,7 +99,13 @@ const newSessionId = () =>
   (globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`).replace(/[^\w-]/g, '')
 
 /** The engine answered with an error (a crash, or a timeout on a long read): it is still there. */
-class EngineError extends Error {}
+class EngineError extends Error {
+  status: number
+  constructor(status: number) {
+    super(`engine ${status}`)
+    this.status = status
+  }
+}
 
 // `sid`: the session the event belongs to. A reply for a session that has since been replaced
 // (another child, "Start a new session") is read to the end but changes nothing on screen.
@@ -104,7 +115,7 @@ async function postEvent(e: ClientEvent, sid: string) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ sessionId: sid, event: e }),
   })
-  if (!r.ok || !r.body) throw new EngineError(`engine ${r.status}`)
+  if (!r.ok || !r.body) throw new EngineError(r.status)
   if (sid === sessionId && state.connection === 'offline') state.connection = 'live'
   if (sid === sessionId) hintPart = null
   const reader = r.body.getReader()
@@ -125,6 +136,8 @@ async function postEvent(e: ClientEvent, sid: string) {
 
 // What the child hears when the engine can't be reached or fails (the reason is logged).
 const NO_ENGINE: Hint = { text: "I couldn't reach the tutor just now. Please try again in a moment.", lang: 'en' }
+// The engine refused new work because the session has ended (409: finished in another tab).
+const ENDED: Hint = { text: 'That session has finished. Try again and a new one starts.', lang: 'en' }
 
 // The engine stopped (nothing answers): "The tutor stopped" shows until it answers again.
 let probing = false
@@ -145,13 +158,16 @@ function waitForEngine() {
   again()
 }
 
+// The session going on in this tab and its student, kept over a reload: { id, student }.
+const SAVED_SESSION = 'glimpse.session'
+
 function sendHttp(e: ClientEvent) {
   if (e.type === 'session_start' || !sessionId) {
     sessionId = newSessionId()
     try {
-      sessionStorage.setItem('glimpse.session', sessionId)
+      if (e.type === 'session_start') sessionStorage.setItem(SAVED_SESSION, JSON.stringify({ id: sessionId, student: e.student }))
     } catch {
-      // private mode: fine
+      // private mode: fine, a reload starts again
     }
   }
   // One event at a time, in order (a slow read finishes before the next event is sent). Each
@@ -172,7 +188,9 @@ function sendHttp(e: ClientEvent) {
       if (e.type === 'session_end') state.summary ??= localSummary()
       else if (e.type !== 'set_age' && e.type !== 'subject') {
         hintPart = null
-        apply({ type: 'hint', hint: NO_ENGINE })
+        // the next line or question starts a new session (fresh())
+        if (err instanceof EngineError && err.status === 409) state.ended = true
+        apply({ type: 'hint', hint: state.ended ? ENDED : NO_ENGINE })
       }
     })
 }
@@ -339,6 +357,7 @@ function clearSession() {
     page: null,
     steps: null,
     summary: null,
+    ended: false,
     topic: null,
   })
 }
@@ -357,7 +376,8 @@ export function localSummary(): SessionSummary {
     title: !done ? 'Thanks for coming by!' : right && right === lines.length ? 'Everything right today!' : 'Good work today!',
     praise: done ? `You wrote ${lines.length} line${lines.length === 1 ? '' : 's'}${lines.length ? ` and got ${right} right` : ''}${q ? `, and asked ${q} question${q === 1 ? '' : 's'}` : ''}.` : 'Next time, write a line or point at an exercise and ask me.',
     practised: done ? [state.topic?.label ?? (state.connection === 'demo' ? 'Adding fractions' : 'Maths')] : [],
-    mistakes: lines.filter((p) => p.verdict === 'wrong' && p.note).slice(-2).map((p) => ({ what: `You ${p.note}.`, tip: 'Watch the explanation again, then try a similar one.' })),
+    // the same mistake made twice is listed once
+    mistakes: [...new Set(lines.filter((p) => p.verdict === 'wrong' && p.note).map((p) => p.note!))].slice(-2).map((note) => ({ what: `You ${note}.`, tip: 'Watch the explanation again, then try a similar one.' })),
     next: wrong ? 'Try a similar exercise, and check each step.' : 'Try one more exercise on your paper.',
     for_adults: `${state.student?.name ?? 'The student'} wrote ${lines.length} line${lines.length === 1 ? '' : 's'} (${right} right, ${wrong} not yet) and asked ${q} question${q === 1 ? '' : 's'}.`,
     minutes: Math.max(1, Math.round((Date.now() - state.startedAt) / 60000)),
@@ -418,6 +438,56 @@ export function startSession(studentId: string) {
   send({ type: 'session_start', student: s.id, name: s.name, lang: state.lang, subject: state.subject, age: settings.age || s.age })
 }
 
+/**
+ * A reload in the middle of a session (on the camera, on My work): the same child carries on in
+ * the same session, with its lines back from the engine's history. A session that has ended, or
+ * has no line yet, makes way for a new one for the same child. Not in the scripted demo.
+ */
+function resumeSession() {
+  const query = new URLSearchParams(location.search)
+  if (query.has('demo')) return
+  let saved: { id?: unknown; student?: unknown } | null = null
+  try {
+    saved = JSON.parse(sessionStorage.getItem(SAVED_SESSION) ?? 'null')
+  } catch {
+    return // private mode, or an older value (just the id)
+  }
+  const s = students.find((x) => x.id === saved?.student)
+  const id = typeof saved?.id === 'string' ? saved.id : ''
+  if (!s || !id || (query.has('student') && query.get('student') !== s.id)) return
+  state.student = s
+  state.lang = TUTOR_LANG === 'student' ? s.lang : TUTOR_LANG
+  state.startedAt = Date.now()
+  sessionId = id
+  fetch(`/api/history/sessions/${encodeURIComponent(id)}`)
+    .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`history ${r.status}`))))
+    .then((records: { kind: string; at: number; data: Record<string, unknown> }[]) => {
+      if (sessionId !== id) return // another session started meanwhile
+      const lines = new Map<number, { at: number; data: Record<string, unknown> }>()
+      for (const r of records) if (r.kind === 'line' && Number.isInteger(r.data?.partId)) lines.set(r.data.partId as number, r)
+      if (!lines.size || records.some((r) => r.kind === 'summary')) return startSession(s.id)
+      if (state.status === 'idle') state.status = 'watching' // as the engine left it, ready for the next line
+      for (const [partId, { at, data }] of [...lines].sort((a, b) => a[0] - b[0])) {
+        const verdict = ['correct', 'wrong', 'unsure'].includes(String(data.verdict)) ? (data.verdict as WrittenPart['verdict']) : 'unsure'
+        state.parts.push({ id: partId, latex: String(data.latex ?? ''), confidence: 0.9, verdict, ...(data.note ? { note: String(data.note) } : {}), at, ...(data.photo ? { crop: String(data.photo) } : {}) })
+        if (data.hint) state.hintsByPart[partId] = { text: String(data.hint), lang: state.lang }
+      }
+    })
+    .catch((err) => {
+      console.warn('Glimpse: the session could not be resumed', err)
+      if (sessionId === id) startSession(s.id)
+    })
+}
+resumeSession()
+
+/**
+ * After End session the engine refuses new work in that session (409, and the child would hear
+ * "I couldn't reach the tutor"): new work goes into a new session for the same child.
+ */
+function fresh() {
+  if (state.ended && state.student) startSession(state.student.id)
+}
+
 /** "Choose a practice": the tutor checks this subject from now on. */
 export function chooseSubject(subject: SubjectId) {
   if (subject === state.subject) return
@@ -429,11 +499,13 @@ export function chooseSubject(subject: SubjectId) {
 /** "This line is finished": the pencil lifted, a key, the mouse button or the on-screen button. */
 export function cutPart(image?: string) {
   if (state.asking || state.confirm || !state.student) return
+  fresh()
   send({ type: 'cut_part', image })
 }
 
 export function askStart() {
   if (state.asking || !state.student) return
+  fresh()
   state.asking = true
   state.question = null
   state.answer = null
@@ -451,6 +523,7 @@ export function askEnd() {
  */
 export function pointAt(image: string, tip?: { x: number; y: number } | null, text = '') {
   if (!state.student) return
+  fresh()
   state.asking = true
   state.answer = null
   state.question = { text: text || '…', lang: state.lang, final: false }
@@ -489,5 +562,6 @@ export function dismissAnswer() {
 }
 
 export function endSession() {
+  state.ended = true
   send({ type: 'session_end' })
 }

@@ -401,11 +401,15 @@ const isInt = (v) => Number.isFinite(v) && Math.abs(v - Math.round(v)) < 1e-9
 const gcd = (a, b) => (b ? gcd(b, a % b) : Math.abs(a))
 const fmt = (v) => (isInt(v) ? String(Math.round(v)) : String(round(v, 3)))
 // A decimal written in full when it ends within 6 decimals (0.25 × 0.25 = 0.0625, not 0.063), else
-// null: it can only be written rounded, with ≈.
+// null: it can only be written rounded, with ≈. The check is on the decimals themselves (only the
+// rounding noise of floating point is allowed, a few units in the last place): 1000/3 is
+// 333.333333333..., which does not end, however big it is. More than 12 digits can't be told
+// from rounding noise: not exact either.
 const exactDec = (v) => {
   if (!Number.isFinite(v)) return null
   const r = round(v, 6)
-  return Math.abs(v - r) <= 1e-9 * Math.max(1, Math.abs(v)) ? String(r) : null
+  if (Math.abs(v - r) > Math.max(1e-12, Math.abs(v) * 1e-14)) return null
+  return String(r).replace(/^-|\./g, '').replace(/^0+/, '').length <= 12 ? String(r) : null
 }
 // a/b as LaTeX, reduced
 function fracTex(n, d) {
@@ -495,7 +499,7 @@ function buildGroups({ a, b }, skin) {
       : [
           { caption: `${s(a, 'plate')}.` },
           { caption: `Put ${s(b, 'cookie')} on each plate.` },
-          { caption: `Count in ${b}s: ${counts.slice(0, 6).join(', ')}${a > 6 ? ', ...' : ''}. That's ${result}!`, math: `${a} \\times ${b} = ${result}` },
+          { caption: `Count in ${b}s: ${counts.slice(0, 6).join(', ')}${a > 6 ? ', and so on' : ''}. That's ${result}!`, math: `${a} \\times ${b} = ${result}` },
         ]
   return { kind: 'groups', skin, a, b, result, counts, stages, resultTex: String(result) }
 }
@@ -532,7 +536,7 @@ function buildFractions({ n1, d1, n2, d2, op }, skin) {
     joined: true,
     math: `\\frac{${m1}}{${l}} ${op} \\frac{${m2}}{${l}} = \\frac{${top}}{${l}}`,
   })
-  if (g > 1 && top) stages.push({ caption: l / g === 1 ? `${top}/${l} is ${top / g} whole${top / g === 1 ? '' : 's'}: ${top / g}.` : `Simplify: ${top}/${l} = ${top / g}/${l / g}.`, cut: true, joined: true, math: `\\frac{${top}}{${l}} = ${fracTex(top, l)}` })
+  if (g > 1 && top) stages.push({ caption: l / g === 1 ? `${top}/${l} is ${top / g} whole${top / g === 1 ? '' : 's'}: ${top / g}.` : `Simplify: ${top}/${l} = ${top / g}/${l / g}.`, cut: true, joined: true, simple: { n: top / g, d: l / g }, math: `\\frac{${top}}{${l}} = ${fracTex(top, l)}` })
   return { kind: 'fractions', skin, n1, d1, n2, d2, op, l, m1, m2, top, stages, resultTex: fracTex(top, l) }
 }
 
@@ -635,7 +639,13 @@ function samples(f, lo, hi, count = 160) {
   return pts
 }
 
-function buildArea({ f, fTex, a, b, F, FTex, variable = 'x' }, skin) {
+// A bound of an integral as written when it isn't a plain number (π, 2π, \frac{\pi}{2}: never
+// 3.142 with "="), else the number
+const boundTex = (v, t) => {
+  const w = String(t ?? '').trim()
+  return w && !/^-?\d+(?:\.\d+)?$/.test(w) && /pi/.test(w) ? w.replace(/(?<![\\a-zA-Z])pi(?![a-zA-Z])/g, '\\pi') : fmt(v)
+}
+function buildArea({ f, fTex, a, b, F, FTex, variable = 'x', aTex, bTex }, skin) {
   if (![a, b].every(Number.isFinite) || a === b || Math.abs(b - a) > 1000) return null
   // the function must be finite all along [a, b]
   for (let i = 0; i <= 200; i++) if (!Number.isFinite(f(a + ((b - a) * i) / 200))) return null
@@ -657,15 +667,31 @@ function buildArea({ f, fTex, a, b, F, FTex, variable = 'x' }, skin) {
     if (Number.isFinite(diff) && Math.abs(diff - value) <= 1e-4 * Math.max(1, Math.abs(value))) anti = { tex: FTex, Fb: round(F(b)), Fa: round(F(a)) }
   }
   const v = `\\,${variable}`
+  const [A, B] = [boundTex(a, aTex), boundTex(b, bTex)]
+  const said = (t) => texToPlain(t).replace(/\(([\dπ.]+)\)/g, '$1') // π/2, not (π)/2
   const stages = [
     { caption: `This is the curve y = ${texToPlain(fTex)}.`, show: 'curve', math: `y = ${fTex}` },
-    { caption: `The integral is the area under it, from ${variable} = ${fmt(a)} to ${variable} = ${fmt(b)}.`, show: 'area', math: `\\int_{${fmt(a)}}^{${fmt(b)}} ${fTex}\\,d${v.trim().slice(2)}` },
+    { caption: `The integral is the area under it, from ${variable} = ${said(A)} to ${variable} = ${said(B)}.`, show: 'area', math: `\\int_{${A}}^{${B}} ${fTex}\\,d${v.trim().slice(2)}` },
   ]
   if (anti) {
     stages.push({ caption: `Find a function whose derivative is the curve: F(${variable}) = ${texToPlain(anti.tex)}.`, show: 'area', math: `F(${variable}) = ${anti.tex}` })
-    stages.push({ caption: `Area = F(${fmt(b)}) − F(${fmt(a)}) = ${fmt(anti.Fb)} − ${fmt(anti.Fa)}.`, show: 'area', math: `F(${fmt(b)}) - F(${fmt(a)}) \\approx ${fmt(anti.Fb)} - ${fmt(anti.Fa)}` })
+    stages.push({ caption: `Area = F(${said(B)}) − F(${said(A)}) ≈ ${fmt(anti.Fb)} − ${fmt(anti.Fa)}.`, show: 'area', math: `F(${B}) - F(${A}) \\approx ${fmt(anti.Fb)} - ${fmt(anti.Fa)}` })
   }
-  stages.push({ caption: `The area is about ${fmt(round(value, 4))}.`, show: 'value', math: `\\approx ${fmt(round(value, 4))}` })
+  // below the x-axis an area counts minus: a negative integral (or 0) is said as one, not as "the area"
+  const [x0, x1] = [Math.min(a, b), Math.max(a, b)]
+  const above = integrate((x) => Math.max(0, f(x)), x0, x1, n)
+  const below = integrate((x) => Math.min(0, f(x)), x0, x1, n)
+  const none = 1e-6 * Math.max(1, above - below)
+  const V = fmt(round(value, 4))
+  const end =
+    b < a
+      ? `The bounds go from right to left, so the sign turns round: the integral is about ${V}.`
+      : below > -none
+        ? `The area is about ${V}.`
+        : above < none
+          ? `The curve is below the x-axis there, so the integral is negative: about ${V}.`
+          : `The part above the x-axis counts plus, the part below counts minus: together about ${V}.`
+  stages.push({ caption: end, show: 'value', math: `\\approx ${V}` })
   const points = samples(f, lo, hi)
   return { kind: 'area', skin, a, b, value: round(value, 6), fTex, antiderivative: anti?.tex, points, plot: plotOf(points, { region: { a, b, value: round(value, 6), when: 'area' }, bounds: { x0: lo, x1: hi } }), stages, resultTex: `\\approx ${fmt(round(value, 4))}` }
 }
@@ -678,12 +704,12 @@ function buildGraph({ f, fTex }, skin) {
   // the crossings, from the exact values (not the rounded ones drawn: e^{-36} is not 0), the
   // last point too; a sign change is a root only if f really gets to 0 there (1/x changes
   // sign at its asymptote, and that is no crossing)
-  const roots = []
+  const found = []
   const xs = pts.map(([x]) => x)
   const ys = xs.map((x) => f(x))
   for (let i = 0; i < xs.length; i++) {
     if (ys[i] === 0) {
-      roots.push(xs[i])
+      found.push(xs[i])
       continue
     }
     if (i === 0 || !Number.isFinite(ys[i - 1]) || !Number.isFinite(ys[i]) || ys[i - 1] === 0 || ys[i - 1] * ys[i] > 0) continue
@@ -695,14 +721,43 @@ function buildGraph({ f, fTex }, skin) {
       else A = m
     }
     const r = (A + B) / 2
-    if (Math.abs(f(r)) <= 1e-6 * Math.max(1, Math.abs(ys[i - 1]), Math.abs(ys[i]))) roots.push(round(r, 3))
+    if (Math.abs(f(r)) <= 1e-6 * Math.max(1, Math.abs(ys[i - 1]), Math.abs(ys[i]))) found.push(r)
   }
+  // a curve that only touches the x-axis (9x^2 - 6x + 1 at 1/3) has no sign change: where |f| is
+  // smallest between two sample points, it may be 0
+  for (let i = 1; i + 1 < xs.length; i++) {
+    const [p, q, r] = [ys[i - 1], ys[i], ys[i + 1]].map(Math.abs)
+    if (![p, q, r].every(Number.isFinite) || q > p || q > r || ys[i - 1] * ys[i + 1] <= 0) continue
+    let A = xs[i - 1]
+    let B = xs[i + 1]
+    for (let k = 0; k < 80; k++) {
+      const m1 = A + (B - A) / 3
+      const m2 = B - (B - A) / 3
+      if (Math.abs(f(m1)) <= Math.abs(f(m2))) B = m2
+      else A = m1
+    }
+    const x = (A + B) / 2
+    if (Math.abs(f(x)) <= 1e-9 * Math.max(1, p, r)) found.push(x)
+  }
+  // each root once: two found where the curve touches the axis (rounding noise makes it cross
+  // twice) are one, and so are roots that are written the same
+  const roots = []
+  for (const r of found.sort((p, q) => p - q)) {
+    const last = roots[roots.length - 1]
+    if (last !== undefined && (Math.abs(r - last) < 1e-6 || niceNum(r).tex === niceNum(last).tex)) continue
+    roots.push(r)
+  }
+  const nice = roots.map((r) => niceNum(r, { decimals: true })) // 0.1, 1/3, or about 1.414 (≈)
   const y0 = f(0)
+  const yn = Number.isFinite(y0) ? niceNum(y0, { decimals: true }) : null
+  const rootsTex = nice.slice(0, 4).map((r) => `x ${r.exact ? '=' : '\\approx'} ${r.tex}`).join(',\\ ')
   const stages = [{ caption: `This is the graph of y = ${texToPlain(fTex)}.`, show: 'curve', math: `y = ${fTex}` }]
-  if (Number.isFinite(y0)) stages.push({ caption: `It crosses the y-axis at y = ${fmt(round(y0, 3))}.`, show: 'y0', math: `x = 0 \\Rightarrow y = ${fmt(round(y0, 3))}` })
-  if (roots.length) stages.push({ caption: `It crosses the x-axis at x = ${roots.slice(0, 4).map(fmt).join(', ')}.`, show: 'roots', math: roots.slice(0, 4).map((r) => `x = ${fmt(r)}`).join(',\\ ') })
-  const marks = [...(Number.isFinite(y0) ? [{ x: 0, y: round(y0, 4), kind: 'dot', label: `(0, ${fmt(round(y0, 3))})`, color: '#ffd34d', when: 'y0' }] : []), ...roots.slice(0, 6).map((r) => ({ x: r, y: 0, kind: 'dot', label: fmt(r), color: '#f47a2a', when: 'roots' }))]
-  return { kind: 'graph', skin, fTex, points: pts, roots: roots.slice(0, 6), y0: Number.isFinite(y0) ? round(y0, 4) : null, plot: plotOf(pts, { markers: marks }), stages, resultTex: roots.length ? roots.slice(0, 4).map((r) => `x = ${fmt(r)}`).join(',\\ ') : '' }
+  if (yn) stages.push({ caption: `It crosses the y-axis at y ${yn.exact ? '=' : '≈'} ${yn.plain}.`, show: 'y0', math: `x = 0 \\Rightarrow y ${yn.exact ? '=' : '\\approx'} ${yn.tex}` })
+  else stages.push({ caption: `At x = 0 there is no value, so it never meets the y-axis.`, show: 'curve', math: `x \\neq 0` })
+  if (roots.length) stages.push({ caption: `It ${roots.length === 1 ? 'meets' : 'crosses'} the x-axis at x ${nice.slice(0, 4).every((r) => r.exact) ? '=' : '≈'} ${nice.slice(0, 4).map((r) => r.plain).join(', ')}.`, show: 'roots', math: rootsTex })
+  else stages.push({ caption: `It never meets the x-axis: y is never 0.`, show: 'roots', math: `y \\neq 0` })
+  const marks = [...(yn ? [{ x: 0, y: round(y0, 4), kind: 'dot', label: `(0, ${yn.plain})`, color: '#ffd34d', when: 'y0' }] : []), ...roots.slice(0, 6).map((r, i) => ({ x: round(r, 6), y: 0, kind: 'dot', label: nice[i].plain, color: '#f47a2a', when: 'roots' }))]
+  return { kind: 'graph', skin, fTex, points: pts, roots: roots.slice(0, 6).map((r) => round(r, 6)), y0: Number.isFinite(y0) ? round(y0, 4) : null, plot: plotOf(pts, { markers: marks }), stages, resultTex: roots.length ? rootsTex : '\\text{no roots}' }
 }
 
 
@@ -793,7 +848,7 @@ function buildSharing({ n, d }, skin) {
       ]
     : [
         { caption: `How many groups of ${d} fit in ${n}?`, show: 'start' },
-        { caption: `Take away ${d} at a time: ${Array.from({ length: Math.min(q, 6) }, (_, i) => n - d * (i + 1)).join(', ')}${q > 6 ? ', ...' : ''}.`, show: 'deal' },
+        { caption: `Take away ${d} at a time: ${Array.from({ length: Math.min(q, 6) }, (_, i) => n - d * (i + 1)).join(', ')}${q > 6 ? ', and so on' : ''}.`, show: 'deal' },
         { caption: `${q} group${q === 1 ? '' : 's'}${r ? `, and ${r} left over` : ''}.`, show: 'result', math: `${n} \\div ${d} = ${q}${r ? `\\text{ remainder } ${r}` : ''}` },
       ]
   return { kind: 'sharing', skin: kid ? skin : skin === 'kid' ? 'junior' : skin, n, d, q, r, stages, resultTex: r ? `${q}\\text{ r }${r}` : String(q) }
@@ -835,15 +890,19 @@ function buildPowers({ base, exp, log }, skin) {
   }
   const chain = Array.from({ length: exp }, (_, i) => base ** (i + 1))
   const times = Array(exp).fill(base).join(' \\times ')
+  // more than 6: the other multiplications in one step, every product said
+  const rest = exp > 6 ? [{ caption: `Keep multiplying by ${base}: ${chain.slice(6).join(', ')}.`, show: exp }] : []
   const stages = log
     ? [
         { caption: `log base ${base} of ${value} asks: how many ${base}s do we multiply to make ${value}?`, show: 0, math: `\\log_{${base}} ${value} = \\, ?` },
         ...chain.slice(0, 6).map((v, i) => ({ caption: i === 0 ? `Start with ${base}.` : `Times ${base} again: ${v}.`, show: i + 1 })),
+        ...rest,
         { caption: `${exp} ${base}s make ${value}, so the answer is ${exp}.`, show: exp, math: `${base}^{${exp}} = ${value} \\Rightarrow \\log_{${base}} ${value} = ${exp}` },
       ]
     : [
         { caption: `${base} to the power ${exp} means ${exp} ${base}s multiplied together.`, show: 0, math: `${base}^{${exp}} = ${exp ? times : '1'}` },
         ...chain.slice(0, 6).map((v, i) => ({ caption: i === 0 ? `Start with ${base}.` : `Times ${base}: ${v}.`, show: i + 1 })),
+        ...rest,
         { caption: `So ${base} to the power ${exp} is ${value}.`, show: exp, math: `${base}^{${exp}} = ${value}` },
       ]
   return { kind: 'powers', skin, base, exp, value, log: !!log, chain, stages, resultTex: log ? String(exp) : String(value) }
@@ -1084,14 +1143,17 @@ function buildTrig({ fn, deg }, skin) {
   const sin = round(Math.sin(t), 6)
   const value = fn === 'sin' ? sin : fn === 'cos' ? cos : Math.abs(cos) < 1e-9 ? null : round(sin / cos, 6)
   const exact = exactTrig(fn, deg)
+  // any other angle has a value that never ends (sin 15° = 0.2588...): written with ≈
+  const approx = value !== null && exact === null
   const valTex = value === null ? '\\text{undefined}' : exact ?? fmt(round(value, 4))
+  const rounded = [cos, sin].some((v) => Math.abs(v - round(v, 3)) > 1e-9)
   const stages = [
     { caption: `Draw a circle with radius 1 around the centre.`, show: 'circle' },
     { caption: `Turn ${fmt(Math.abs(deg))}° from the right-hand side, ${deg < 0 ? 'clockwise' : 'anticlockwise'}.`, show: 'angle', math: `\\theta = ${fmt(deg)}^\\circ` },
-    { caption: `The point on the circle is (cos θ, sin θ) = (${fmt(round(cos, 3))}, ${fmt(round(sin, 3))}).`, show: 'point', math: `(\\cos ${fmt(deg)}^\\circ,\\ \\sin ${fmt(deg)}^\\circ)` },
-    { caption: fn === 'sin' ? `sin is how high the point is.` : fn === 'cos' ? `cos is how far across the point is.` : `tan is how high divided by how far across.`, show: fn, math: `\\${fn} ${fmt(deg)}^\\circ = ${valTex}` },
+    { caption: `The point on the circle is (cos θ, sin θ) ${rounded ? '≈' : '='} (${fmt(round(cos, 3))}, ${fmt(round(sin, 3))}).`, show: 'point', math: `(\\cos ${fmt(deg)}^\\circ,\\ \\sin ${fmt(deg)}^\\circ)` },
+    { caption: fn === 'sin' ? `sin is how high the point is.` : fn === 'cos' ? `cos is how far across the point is.` : `tan is how high divided by how far across.`, show: fn, math: `\\${fn} ${fmt(deg)}^\\circ ${approx ? '\\approx' : '='} ${valTex}` },
   ]
-  return { kind: 'trig', skin, fn, deg, cos, sin, value, stages, resultTex: valTex }
+  return { kind: 'trig', skin, fn, deg, cos, sin, value, stages, resultTex: approx ? `\\approx ${valTex}` : valTex }
 }
 
 // A plot (area, graph, quadratic, limit, derivative, system): curves and overlays, each with
@@ -1137,7 +1199,8 @@ function buildQuadratic({ A, B, C, eq }, skin) {
   const span = Math.max(3, ...roots.map((r) => Math.abs(r - vx) * 1.6))
   const points = samples(f, vx - span, vx + span, 200)
   const co = (v) => exactNum(v).tex
-  const poly = `${co(A) === '1' ? '' : co(A) === '-1' ? '-' : co(A)}x^2 ${B < 0 ? '-' : '+'} ${co(Math.abs(B))}x ${C < 0 ? '-' : '+'} ${co(Math.abs(C))}`
+  // (no "+ 0x" or "1x": x^2 + 1, x^2 - x)
+  const poly = `${co(A) === '1' ? '' : co(A) === '-1' ? '-' : co(A)}x^2${B ? ` ${B < 0 ? '-' : '+'} ${co(Math.abs(B)) === '1' ? '' : co(Math.abs(B))}x` : ''}${C ? ` ${C < 0 ? '-' : '+'} ${co(Math.abs(C))}` : ''}`
   // the roots exactly: whole numbers and fractions (6x^2 - 5x + 1 = 0: 1/3 and 1/2), square roots
   // when the coefficients are whole numbers (x^2 = 2: ±√2), else rounded with ≈
   const whole = [A, B, C].every(Number.isInteger)
@@ -1172,14 +1235,30 @@ function buildQuadratic({ A, B, C, eq }, skin) {
   }
 }
 
-// a nice number for a limit value: integers and simple fractions shown exactly
-function niceTex(v) {
-  if (!Number.isFinite(v)) return v > 0 ? '\\infty' : '-\\infty'
-  for (let d = 1; d <= 12; d++) {
+// A computed value (a limit, a slope, a root) as LaTeX: whole numbers and fractions exactly, else
+// rounded, with exact: false (it is then written with ≈, never "="). Simple fractions (bottoms up
+// to 12) are found even in a value that is only close (a limit is an estimate); bigger bottoms
+// (1/13, 11/13) only when the value is that fraction to the last digits. decimals: a decimal
+// that ends is written as one (0.1, not 1/10: a graph of y = x^2 - 0.2x + 0.01).
+function niceNum(v, { decimals = false } = {}) {
+  if (!Number.isFinite(v)) return { tex: v > 0 ? '\\infty' : '-\\infty', plain: v > 0 ? '∞' : '-∞', exact: true }
+  // (to 1e-7: a root where the curve only touches the axis is found that precisely)
+  const r4 = round(v, 4)
+  if (decimals && !isInt(v) && Math.abs(v - r4) < 1e-7) return { tex: String(r4), plain: String(r4), exact: true }
+  for (let d = 1; d <= 100; d++) {
     const n = Math.round(v * d)
-    if (Math.abs(n / d - v) < 1e-6) return d === 1 ? String(n) : fracTex(n, d)
+    if (Math.abs(n / d - v) < (d <= 12 ? 1e-6 : 1e-9 * Math.max(1, Math.abs(v)))) {
+      const g = gcd(n, d) || 1
+      return { tex: fracTex(n, d), plain: d / g === 1 ? String(n / g) : `${n / g}/${d / g}`, exact: true }
+    }
   }
-  return fmt(round(v, 4))
+  return { tex: fmt(round(v, 4)), plain: fmt(round(v, 4)), exact: false }
+}
+const niceTex = (v) => niceNum(v).tex
+// "lhs = value", or "lhs ≈ value" when the value is rounded
+const niceEq = (lhs, v) => {
+  const x = niceNum(v)
+  return `${lhs} ${x.exact ? '=' : '\\approx'} ${x.tex}`
 }
 
 // Where values taken closer and closer in head (each step ten times closer: x = a ± 10^-k, or
@@ -1188,6 +1267,24 @@ function niceTex(v) {
 // values (at x = 1e-8, 1 - cos x is exactly 0), so the estimate comes from where the values are
 // steadiest: Aitken's extrapolation (errors like a power of the step: x², √x) or one in 1/k
 // (1/ln x), whichever settles best.
+// Does f keep swinging near a? The spread between f at a ± 10^-k and at points in between
+// (a ± 1.37·10^-k, ...) must shrink as k grows; for a wave like sin(π/x) it doesn't.
+function swings(f, a, inf, one) {
+  const C = [Math.SQRT2, Math.E / 2, Math.PI / 2, 8 / 7] // never whole numbers, even times 10^6
+  const at = (k, c, dir) => (inf ? Math.sign(a) * c * 10 ** k : a + dir * c * 10 ** -k)
+  for (const dir of inf ? [1] : one === '+' ? [1] : one === '-' ? [-1] : [-1, 1]) {
+    const spread = (k) => {
+      const base = f(at(k, 1, dir))
+      const ys = C.map((c) => f(at(k, c, dir)))
+      return Number.isFinite(base) && ys.every(Number.isFinite) ? Math.max(...ys.map((y) => Math.abs(y - base))) : null
+    }
+    const [s3, s6] = [spread(3), spread(6)]
+    if (s3 === null || s6 === null) continue
+    if (s6 > 0.05 * Math.max(1, Math.abs(f(at(6, 1, dir)))) && s6 > 0.5 * s3) return true
+  }
+  return false
+}
+
 function settle(raw) {
   if (!raw.some(Number.isFinite)) {
     const last = raw[raw.length - 1]
@@ -1260,6 +1357,12 @@ const bigFmt = (y) => {
   return `${fmt(round(y / 10 ** e, 2))} × 10^${e}`
 }
 
+// and 1.2 × 10^-7 when it is tiny (never "1.2e-7")
+const tiny = (y) => {
+  const e = Math.floor(Math.log10(Math.abs(y)))
+  return `${fmt(round(y / 10 ** e, 2))} × 10^${e}`
+}
+
 // lim x->a f(x): values from the left and from the right, closer and closer; the hole at a
 function buildLimit({ f, fTex, a, variable = 'x', side = null }, skin) {
   if (typeof a !== 'number' || Number.isNaN(a)) return null // a target that isn't a number (c, "0,5" misread)
@@ -1292,8 +1395,16 @@ function buildLimit({ f, fTex, a, variable = 'x', side = null }, skin) {
     left = one === '+' ? [] : hs.map((h) => [a - h, f(a - h)])
     right = one === '-' ? [] : hs.map((h) => [a + h, f(a + h)])
   }
+  // values taken only at a ± 10^-k can all land on the same point of a wave (sin(π/x) is 0 at
+  // every one of them): points as close in, in between, must agree too, or there is no limit
+  const swinging = Number.isFinite(L) && swings(f, a, inf, inf ? null : side || forced)
+  if (swinging) L = NaN
   const one = inf ? null : side || forced
-  const Ltex = Number.isNaN(L) ? '\\text{does not exist}' : niceTex(round(L, 6))
+  const Lnum = Number.isNaN(L) ? null : niceNum(L)
+  const Ltex = Lnum ? Lnum.tex : '\\text{does not exist}'
+  // "= 1/13", or "≈ 2.718" when the limit can only be written rounded
+  const isL = Lnum && !Lnum.exact ? '\\approx' : '='
+  const Lsaid = Lnum ? (Lnum.exact ? Lnum.plain : `about ${Lnum.plain}`) : ''
   const fa = inf ? NaN : f(a)
   const defined = Number.isFinite(fa)
   const finiteL = Number.isFinite(L)
@@ -1303,16 +1414,28 @@ function buildLimit({ f, fTex, a, variable = 'x', side = null }, skin) {
   const points = samples(f, lo, hi, 240)
   const v = variable
   const pa = inf ? '' : fmt(a)
+  // a value read out: never rounded onto the limit itself (sin x / x at 0.01 is 0.99998, not 1)
+  const near = (y) => {
+    if (Math.abs(y) >= 1e6 || !finiteL || Math.abs(y - L) < 1e-12) return bigFmt(y)
+    // small values keep three digits that matter (0.0769, not 0.077)
+    for (let d = 3 + Math.max(0, -Math.floor(Math.log10(Math.abs(y) || 1)) - 1); d <= 12; d++) {
+      const r = round(y, d)
+      if (Math.abs(r - L) > 1e-12 && (!isInt(r) || isInt(y))) return /e/.test(String(r)) ? tiny(r) : String(r)
+    }
+    return String(round(y, 9))
+  }
   // only values that exist are read out (never "NaN")
-  const row = (pts) => pts.filter(([, y]) => Number.isFinite(y)).map(([x, y]) => `f(${fmt(round(x, 3))}) = ${bigFmt(y)}`).slice(-3).join(', ') || 'the values are too big to write'
+  const row = (pts) => pts.filter(([, y]) => Number.isFinite(y)).map(([x, y]) => `f(${fmt(round(x, 3))}) = ${near(y)}`).slice(-3).join(', ') || 'the values are too big to write'
   const plain = texToPlain(fTex)
   const from = one === '+' ? 'From the right' : 'From the left'
   const toTex = inf ? `${a > 0 ? '' : '-'}\\infty` : `${pa}${one ? `^{${one}}` : ''}`
+  // without end, up (plus infinity) or down (minus infinity)
+  const endless = (who, s) => `${who} ${L > 0 ? `grow${s}` : `fall${s}`} without end: the limit is ${L > 0 ? '' : 'minus '}infinity.`
   const stages = inf
     ? [
         { caption: `This is y = ${plain}.`, show: 'curve', math: `y = ${fTex}` },
         { caption: `${a > 0 ? `Make ${v} bigger and bigger` : `Make ${v} more and more negative`}: ${row(right)}.`, show: 'right', math: `\\lim_{${v} \\to ${toTex}} ${fTex}` },
-        { caption: Number.isNaN(L) ? `The values don't settle on one number, so there is no limit.` : !finiteL ? `The values grow without end: the limit is ${L > 0 ? '' : 'minus '}infinity.` : `The values get closer and closer to ${texToPlain(Ltex)}.`, show: 'value', math: `\\lim_{${v} \\to ${toTex}} ${fTex} = ${Ltex}` },
+        { caption: Number.isNaN(L) ? `The values don't settle on one number, so there is no limit.` : !finiteL ? endless('The values', '') : `The values get closer and closer to ${Lsaid}.`, show: 'value', math: `\\lim_{${v} \\to ${toTex}} ${fTex} ${isL} ${Ltex}` },
       ]
     : [
         { caption: `This is y = ${plain}.${defined ? '' : ` At ${v} = ${pa} it isn't defined${asymptote ? ': there is a vertical asymptote' : finiteL ? ': there is a hole' : ''}.`}`, show: 'curve', math: `y = ${fTex}` },
@@ -1320,34 +1443,50 @@ function buildLimit({ f, fTex, a, variable = 'x', side = null }, skin) {
         ...(one !== '-' ? [{ caption: `${forced ? `It isn't defined left of ${pa}, so come closer from the right only` : one ? 'Come closer from the right only' : 'And from the right'}: ${row(right)}.`, show: 'right', math: `${v} \\to ${pa}^+` }] : []),
         {
           caption: Number.isNaN(L)
-            ? one || Number.isNaN(tl) || Number.isNaN(tr)
+            ? swinging
+              ? `Closer and closer in, the values keep swinging up and down: they never settle, so there is no limit.`
+              : one || Number.isNaN(tl) || Number.isNaN(tr)
               ? `The values don't settle on one number, so there is no limit.`
               : `Left and right go to different places, so there is no limit.`
             : !finiteL
-              ? `${one ? `${from} it grows` : 'Both sides grow'} without end: the limit is ${L > 0 ? '' : 'minus '}infinity.`
-              : `${one ? `${from} it gets` : 'Both sides get'} closer and closer to ${texToPlain(Ltex)}: that's the limit.`,
+              ? endless(one ? `${from} it` : 'Both sides', one ? 's' : '')
+              : `${one ? `${from} it gets` : 'Both sides get'} closer and closer to ${Lsaid}: that's the limit.`,
           show: 'value',
-          math: `\\lim_{${v} \\to ${toTex}} ${fTex} = ${Ltex}`,
+          math: `\\lim_{${v} \\to ${toTex}} ${fTex} ${isL} ${Ltex}`,
         },
       ]
+  const markers = [
+    // a dot where f(a) is the limit, a hole where it isn't (or isn't defined)
+    ...(finiteL && !inf ? [{ x: a, y: round(L, 6), kind: defined && Math.abs(fa - L) <= 1e-6 * Math.max(1, Math.abs(L)) ? 'dot' : 'hole', label: Lnum.plain, color: '#3fe0d0', when: 'value' }] : []),
+    ...left.filter(([, y]) => Number.isFinite(y)).map(([x, y], i) => ({ x: round(x, 6), y: round(y, 6), kind: 'dot', color: '#ffd34d', when: 'left', delay: i * 0.35 })),
+    ...right.filter(([x, y]) => Number.isFinite(y) && x >= lo && x <= hi).map(([x, y], i) => ({ x: round(x, 6), y: round(y, 6), kind: 'dot', color: '#f47a2a', when: 'right', delay: i * 0.35 })),
+  ]
+  // The picture is fitted to the curve. Values far outside it (1/x at 0.001 is 1000) would squash
+  // the curve flat onto the x-axis: they stay in the captions, the picture keeps the curve's own
+  // height (the middle 94% of it, like the plot does) and leaves those dots out.
+  const ys = points.map(([, y]) => y).filter((y) => y !== null).sort((p, q) => p - q)
+  let bounds = { x0: lo, x1: hi }
+  let shown = markers
+  if (ys.length > 20) {
+    let ylo = Math.min(ys[Math.floor(ys.length * 0.03)], finiteL ? L : Infinity, 0)
+    let yhi = Math.max(ys[Math.ceil(ys.length * 0.97) - 1], finiteL ? L : -Infinity, 0)
+    const pad = (yhi - ylo || 1) * 0.14
+    ylo -= pad
+    yhi += pad
+    if (markers.some((m) => m.y < ylo - (yhi - ylo) || m.y > yhi + (yhi - ylo))) {
+      bounds = { ...bounds, y0: round(ylo, 6), y1: round(yhi, 6) }
+      shown = markers.filter((m) => m.y >= ylo && m.y <= yhi)
+    }
+  }
   return {
     kind: 'limit',
     skin,
     a: inf ? null : a,
     toInfinity: inf ? Math.sign(a) : 0,
     value: finiteL ? round(L, 6) : null,
-    plot: plotOf(points, {
-      markers: [
-        // a dot where f(a) is the limit, a hole where it isn't (or isn't defined)
-        ...(finiteL && !inf ? [{ x: a, y: round(L, 6), kind: defined && Math.abs(fa - L) <= 1e-6 * Math.max(1, Math.abs(L)) ? 'dot' : 'hole', label: Ltex.replace(/\\frac\{(-?\d+)\}\{(\d+)\}/, '$1/$2'), color: '#3fe0d0', when: 'value' }] : []),
-        ...left.filter(([, y]) => Number.isFinite(y)).map(([x, y], i) => ({ x: round(x, 6), y: round(y, 6), kind: 'dot', color: '#ffd34d', when: 'left', delay: i * 0.35 })),
-        ...right.filter(([x, y]) => Number.isFinite(y) && x >= lo && x <= hi).map(([x, y], i) => ({ x: round(x, 6), y: round(y, 6), kind: 'dot', color: '#f47a2a', when: 'right', delay: i * 0.35 })),
-      ],
-      guide: finiteL ? { y: round(L, 6), when: 'value' } : null,
-      bounds: { x0: lo, x1: hi },
-    }),
+    plot: plotOf(points, { markers: shown, guide: finiteL ? { y: round(L, 6), when: 'value' } : null, bounds }),
     stages,
-    resultTex: Ltex,
+    resultTex: Lnum && !Lnum.exact ? `\\approx ${Ltex}` : Ltex,
   }
 }
 
@@ -1380,10 +1519,11 @@ function buildDerivative({ f, fTex, x0 = 1, dTex, df }, skin) {
   const span = Math.max(1.6, Math.abs(m) * w * 1.15)
   const points = samples(f, lo - 0.5, hi + 0.5, 220)
   const dpoints = samples(slope, lo - 0.5, hi + 0.5, 160)
+  const slope0 = niceNum(m) // 3, 1/4, or about 2.718 (e^x at 1)
   const stages = [
     { caption: `This is y = ${texToPlain(fTex)}.`, show: 'curve', math: `y = ${fTex}` },
     { caption: `The derivative is the slope of the curve: how steep it is at each point.`, show: 'tangent', math: `f'(x) = \\lim_{h \\to 0} \\frac{f(x+h) - f(x)}{h}` },
-    { caption: `At x = ${fmt(x0)} the tangent line has slope ${fmt(round(m, 4))}.`, show: 'tangent', math: `f'(${fmt(x0)}) = ${niceTex(round(m, 6))}` },
+    { caption: `At x = ${fmt(x0)} the tangent line has slope ${slope0.exact ? slope0.plain : `about ${slope0.plain}`}.`, show: 'tangent', math: niceEq(`f'(${fmt(x0)})`, m) },
     { caption: formula ? `Doing this everywhere gives a new curve: f'(x) = ${texToPlain(formula)}.` : `Doing this everywhere gives a new curve, the derivative.`, show: 'derivative', math: formula ? `f'(x) = ${formula}` : `f'(x)` },
   ]
   return {
@@ -1400,7 +1540,7 @@ function buildDerivative({ f, fTex, x0 = 1, dTex, df }, skin) {
       bounds: { x0: lo, x1: hi, y0: round(y0 - span, 6), y1: round(y0 + span, 6) },
     }),
     stages,
-    resultTex: `f'(${fmt(x0)}) = ${niceTex(round(m, 6))}`,
+    resultTex: niceEq(`f'(${fmt(x0)})`, m),
   }
 }
 
@@ -1415,10 +1555,22 @@ function buildSystem({ e1, e2 }, skin) {
   const lo = x - 5
   const hi = x + 5
   const eqTex = (e) => `${fmt(e.a) === '1' ? '' : fmt(e.a) === '-1' ? '-' : fmt(e.a)}x ${e.b < 0 ? '-' : '+'} ${fmt(Math.abs(e.b)) === '1' ? '' : fmt(Math.abs(e.b))}y = ${fmt(e.c)}`
+  // the answer exactly: with whole-number coefficients x and y are fractions (Cramer's rule:
+  // x + 2y = 1, 3x - 7y = 2 has x = 11/13), else as exact as they can be, ≈ when rounded
+  const whole = [e1.a, e1.b, e1.c, e2.a, e2.b, e2.c].every((v) => isInt(v) && Math.abs(v) < 1e6)
+  const D = Math.round(det)
+  const exactly = (top) => {
+    const g = gcd(top, D) || 1
+    const [n, d] = D < 0 ? [-top / g, -D / g] : [top / g, D / g]
+    return { tex: fracTex(n, d), plain: d === 1 ? String(n) : `${n}/${d}`, exact: true }
+  }
+  const X = whole ? exactly(Math.round(e1.c * e2.b - e2.c * e1.b)) : niceNum(x)
+  const Y = whole ? exactly(Math.round(e1.a * e2.c - e2.a * e1.c)) : niceNum(y)
+  const answer = `x ${X.exact ? '=' : '\\approx'} ${X.tex},\\ y ${Y.exact ? '=' : '\\approx'} ${Y.tex}`
   const stages = [
     { caption: `The first equation is a straight line.`, show: 'line1', math: eqTex(e1) },
     { caption: `So is the second one.`, show: 'line2', math: eqTex(e2) },
-    { caption: `The solution is the point on both lines: where they cross, (${fmt(round(x, 3))}, ${fmt(round(y, 3))}).`, show: 'cross', math: `x = ${niceTex(round(x, 6))},\\ y = ${niceTex(round(y, 6))}` },
+    { caption: `The solution is the point on both lines: where they cross, ${X.exact && Y.exact ? '' : 'about '}(${X.plain}, ${Y.plain}).`, show: 'cross', math: answer },
   ]
   return {
     kind: 'system',
@@ -1428,11 +1580,11 @@ function buildSystem({ e1, e2 }, skin) {
     plot: plotOf(samples(line(e1), lo, hi, 80), {
       mainWhen: 'line1',
       extra: [{ points: samples(line(e2), lo, hi, 80), color: '#f47a2a', label: '', when: 'line2' }],
-      markers: [{ x: round(x, 6), y: round(y, 6), kind: 'dot', label: `(${fmt(round(x, 3))}, ${fmt(round(y, 3))})`, color: '#ffd34d', when: 'cross' }],
+      markers: [{ x: round(x, 6), y: round(y, 6), kind: 'dot', label: `(${X.plain}, ${Y.plain})`, color: '#ffd34d', when: 'cross' }],
       bounds: { x0: lo, x1: hi },
     }),
     stages,
-    resultTex: `x = ${niceTex(round(x, 6))},\\ y = ${niceTex(round(y, 6))}`,
+    resultTex: answer,
   }
 }
 
@@ -1515,7 +1667,7 @@ function buildChance(c, skin) {
   const stages = [
     { caption: `All the things that can happen: ${all} outcomes, all equally likely.`, show: 'all' },
     { caption: `The ones that give ${what}: ${good}.`, show: 'good' },
-    { caption: `Probability = ${good} out of ${all}${good && fracTex(good, all) !== `\\frac{${good}}{${all}}` ? `, which is ${texToPlain(fracTex(good, all))}` : ''}.`, show: 'value', math: `P = \\frac{${good}}{${all}}${fracTex(good, all) !== `\\frac{${good}}{${all}}` ? ` = ${fracTex(good, all)}` : ''} \\approx ${fmt(round(good / all, 3))}` },
+    { caption: `Probability = ${good} out of ${all}${good && fracTex(good, all) !== `\\frac{${good}}{${all}}` ? `, which is ${texToPlain(fracTex(good, all))}` : ''}.`, show: 'value', math: `P = \\frac{${good}}{${all}}${fracTex(good, all) !== `\\frac{${good}}{${all}}` ? ` = ${fracTex(good, all)}` : ''}${good === 0 || good === all ? '' : exactDec(good / all) !== null ? ` = ${exactDec(good / all)}` : ` \\approx ${fmt(round(good / all, 3))}`}` },
   ]
   return { kind: 'chance', skin, type: c.type, outcomes, good, all, stages, resultTex: fracTex(good, all) }
 }
@@ -1555,7 +1707,7 @@ function buildCombinations({ n, r }, skin) {
   const stages = [
     { caption: `Choose ${r} out of ${n}. The order doesn't matter.`, show: 'items', math: `\\binom{${n}}{${r}}` },
     ...(r === 0 ? [{ caption: `There is just one way to choose nothing: take none of them.`, show: 'items' }] : []),
-    ...(groups.length ? [{ caption: `Here are all the groups: ${groups.slice(0, 10).join(', ')}${groups.length > 10 ? ', ...' : ''}.`, show: 'groups' }] : []),
+    ...(groups.length ? [{ caption: `Here are all the groups: ${groups.slice(0, 10).join(', ')}${groups.length > 10 ? ', and more' : ''}.`, show: 'groups' }] : []),
     { caption: `The formula: n! ÷ (r! × (n − r)!) = ${n}! ÷ (${r}! × ${n - r}!) = ${value}.`, show: 'value', math: `\\binom{${n}}{${r}} = \\frac{${n}!}{${r}!\\,${n - r}!} = ${value}` },
   ]
   return { kind: 'combinations', skin, n, r, letters, value, groups, stages, resultTex: String(value) }
@@ -1641,6 +1793,10 @@ function readIntegral(src) {
   d.lastIndex = 1
   const dm = d.exec(rest)
   if (!dm) return null
+  // only an answer may follow (= ..., ≈ ...), and only words may come before ("Compute ...")
+  const after = rest.slice(dm.index + dm[0].length).trim()
+  if (after && !/^(?:=|\\approx|≈|[.,;:?!])/.test(after)) return null
+  if (/[\d)}+\-*/=^]\s*$/.test(src.slice(0, m.index))) return null
   return { lo: lo.body, hi: hi.body, body: rest.slice(0, dm.index).trim(), variable: dm[1] }
 }
 const num = (s) => {
@@ -1796,7 +1952,9 @@ function readBag(low) {
   if (/\d|\b(?:two|three|both|twice|again|second|another|replace\w*|in a row|one after|then|each)\b/.test(rest)) return null
   const q = askedPart(rest)
   if (q === null) return null
-  const said = new Set([...q.matchAll(new RegExp(`\\b(not\\s+(?:a\\s+|an\\s+|the\\s+)?)?(${COLOURS})\\b`, 'g'))].map((m) => `${m[1] ? 'not ' : ''}${m[2]}`))
+  // "not red", "not a red", "not picking (out) red", "isn't red", "non-red"
+  const NOT = String.raw`(?:\bnot|n't|\bnon-?)\s*(?:(?:picking|getting|taking|drawing|choosing|pulling|being|selecting)\s+(?:out\s+)?)?(?:a\s+|an\s+|the\s+|one\s+)?`
+  const said = new Set([...q.matchAll(new RegExp(`(${NOT})?\\b(${COLOURS})\\b`, 'g'))].map((m) => `${m[1] ? 'not ' : ''}${m[2]}`))
   if (said.size !== 1) return null
   const [w] = said
   const colour = w.replace('not ', '')
@@ -1900,9 +2058,10 @@ function detectSpecial(src) {
   const AMT = String.raw`(\d{1,3}(?:(?:,|\\,| )\d{3})+(?!\d)(?:\.\d+)?|\d+(?:\.\d+)?)`
   const pc = new RegExp(String.raw`(?<![\d.])(\d+(?:\.\d+)?)\s*(?:\\?%|percent\b|per cent\b)\s*(?:of\b|\\times|×|\*|x\b)\s*[£€$¥]?\s*${AMT}\s*[£€$¥]?`, 'i').exec(src)
   if (pc && alone(src, pc)) return { kind: 'percent', p: Number(pc[1]), of: Number(pc[2].replace(/,|\\,| /g, '')) }
-  // trig of an angle in degrees: only when that is the whole exercise (sin 30°, \cos(120^\circ) =),
-  // not sin(2x) in a graph, an integral or an equation, nor arcsin 0.5
-  const tr = /^\s*\\?(sin|cos|tan)\s*\(?\s*(-?\d+(?:\.\d+)?)\s*(?:°|\^\s*\{?\s*\\circ\s*\}?|\\degree|deg(?:rees?)?)?\s*\)?\s*(?:=\s*\??\s*)?$/.exec(src.replace(/\\left|\\right/g, ''))
+  // trig of an angle in degrees: only when that is the whole exercise (sin 30°, \cos(120^\circ) =,
+  // or with the student's answer after the "=": sin 30° = 0.6), not sin(2x) in a graph, an
+  // integral or an equation, nor arcsin 0.5
+  const tr = /^\s*\\?(sin|cos|tan)\s*\(?\s*(-?\d+(?:\.\d+)?)\s*(?:°|\^\s*\{?\s*\\circ\s*\}?|\\degree|deg(?:rees?)?)?\s*\)?\s*(?:=[^=a-zA-Z]*)?$/.exec(src.replace(/\\left|\\right/g, ''))
   if (tr) return { kind: 'trig', fn: tr[1], deg: Number(tr[2]) }
   // Pythagoras: 3^2 + 4^2 = c^2, 3^2 + b^2 = 5^2, 5^2 = 3^2 + b^2, a^2 + 4^2 = 5^2, \sqrt{3^2 + 4^2}.
   // The unknown is squared too (3^2 + 4^2 = x is just 25); it may be any letter in the usual
@@ -2023,7 +2182,7 @@ export function detectScene(text) {
   if (special) return special
   // definite integral
   const m = readIntegral(src)
-  if (m) return { kind: 'area', expression: m.body, from: num(m.lo), to: num(m.hi), variable: m.variable, tex: src }
+  if (m) return { kind: 'area', expression: m.body, from: num(m.lo), to: num(m.hi), fromTex: m.lo, toTex: m.hi, variable: m.variable, tex: src }
   const plain = toExpr(src)
   // 1 + 2 + ... + n: n is the last term (1 + 2 + ... + 99 + 100 is up to 100), the terms
   // written out go up by one, and n is a number (not 10n)
@@ -2060,7 +2219,9 @@ export function detectScene(text) {
   // in it: \frac{1}{2} \times 42 or 1/2 ÷ 1/4 would be worked in decimals, with brackets nobody
   // wrote (and 1/2 ÷ 1/4 read as 1 ÷ 2 ÷ 1 ÷ 4)
   const ops = (lhs.match(/[-+*/^]/g) || []).length
-  const fractions = /\\[dt]?frac\s*\{\s*\d+\s*\}\s*\{\s*\d+\s*\}/.test(src) || (/\d\s*\/\s*\d/.test(src) && /÷|\\div(?![a-zA-Z])|\d\s*:\s*\d/.test(src))
+  // (the left side only: an answer written as a fraction, 3 / 2 + 1 = \frac{5}{2}, is no reason)
+  const srcLeft = src.split('=')[0]
+  const fractions = /\\[dt]?frac\s*\{\s*\d+\s*\}\s*\{\s*\d+\s*\}/.test(srcLeft) || (/\d\s*\/\s*\d/.test(srcLeft) && /÷|\\div(?![a-zA-Z])|\d\s*:\s*\d/.test(srcLeft))
   if (!fractions && /^[\d\s+\-*/^().]+$/.test(lhs) && (ops >= 2 || /[()]/.test(lhs)) && !/^\s*\(?\s*\d+\s*\)?\s*$/.test(lhs)) return { kind: 'order_ops', expression: lhs }
   const div = /^(\d+)\s*\/\s*(\d+)$/.exec(lhs)
   if (div && Number(div[1]) >= Number(div[2])) return { kind: 'sharing', n: Number(div[1]), d: Number(div[2]) }
@@ -2150,7 +2311,7 @@ export function buildScene(choice, { age } = {}) {
           F = null
         }
       }
-      return buildArea({ f, fTex: plainToTex(String(choice.expression).trim()), a: Number(choice.from), b: Number(choice.to), F, FTex: F ? plainToTex(String(choice.antiderivative).replace(/\+\s*C\s*$/i, '').trim()) : '', variable }, skin)
+      return buildArea({ f, fTex: plainToTex(String(choice.expression).trim()), a: Number(choice.from), b: Number(choice.to), aTex: choice.fromTex, bTex: choice.toTex, F, FTex: F ? plainToTex(String(choice.antiderivative).replace(/\+\s*C\s*$/i, '').trim()) : '', variable }, skin)
     }
     if (kind === 'graph') return buildGraph({ f: compile(choice.expression), fTex: plainToTex(String(choice.expression).trim()) }, skin)
   } catch {

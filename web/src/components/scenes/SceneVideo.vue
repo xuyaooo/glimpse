@@ -22,21 +22,37 @@ const scene = computed(() => steps.value?.scene ?? null)
 const poster = computed(() => player.mode === 'poster')
 const current = computed(() => scene.value?.stages[player.stage] ?? null)
 const n = computed(() => scene.value?.stages.length ?? 0)
+// the end card's answer: none to show (a tutor-only result, a scene with no answer), no pill
+const answerTex = computed(() => (steps.value?.result || scene.value?.resultTex || '').trim())
 const duration = computed(() => {
   const s = Math.round(totalMs(steps.value) / 1000)
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
 })
-// a slow drift, a different way at each step, like a camera
-// the title card shows (1.5 s before step 1 is told) only when playing from the start, not on
-// Back to step 1
-const titled = ref(player.stage === 0)
+// The title card shows (1.5 s before step 1 is told) only when playing from the start, not on
+// Back to step 1. A card mounted while it shows (going full screen at once) carries on from where
+// it was; one mounted later (full screen at step 2, back to the camera) shows none.
+const titleAge = ref(0)
+const titled = ref(false)
+function title() {
+  titleAge.value = Date.now() - player.startedAt
+  titled.value = player.stage === 0 && !player.finished && titleAge.value < 1600
+}
+title()
 watch(
   () => [player.run, player.stage] as const,
-  ([run, stage], [oldRun]) => (titled.value = run !== oldRun && stage === 0),
+  ([run], [oldRun]) => (run !== oldRun ? title() : (titled.value = false)),
 )
+// the confetti of the ending, only when it happens: not again when the card is mounted
+const burst = ref(0)
+watch(
+  () => player.burst,
+  (b) => (burst.value = b),
+)
+// a slow drift, a different way at each step, like a camera. Kept small (at most about 1.25%
+// of each edge goes out of the picture): the drawings put labels close to their edges.
 const drift = computed(() => {
   const k = player.stage % 3
-  return poster.value ? 'scale(1)' : ['scale(1.035) translate(-0.8%, -0.6%)', 'scale(1.02) translate(0.9%, 0.4%)', 'scale(1.045) translate(0, -0.9%)'][k]
+  return poster.value ? 'scale(1)' : ['scale(1.015) translate(-0.25%, -0.2%)', 'scale(1.01) translate(0.25%, 0.2%)', 'scale(1.02) translate(0, -0.2%)'][k]
 })
 </script>
 
@@ -47,7 +63,7 @@ const drift = computed(() => {
     <div :style="{ transform: drift, transition: 'transform 7s ease-out' }">
       <SceneStage :key="`${steps.at}-${poster ? 'poster' : player.run}`" :scene="scene" :stage="poster ? n - 1 : player.stage" class="!rounded-none" />
     </div>
-    <div class="pointer-events-none absolute inset-x-0 top-0 flex justify-center"><Confetti :burst="player.burst" /></div>
+    <div class="pointer-events-none absolute inset-x-0 top-0 flex justify-center"><Confetti :burst="burst" /></div>
 
     <!-- poster: ready to play -->
     <button v-if="poster" type="button" class="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-gradient-to-t from-[#0b1d28]/85 via-[#0b1d28]/35 to-[#0b1d28]/10 text-center" :aria-label="`Play: ${sceneLabel(scene.kind)}`" @click="start()">
@@ -65,17 +81,19 @@ const drift = computed(() => {
 
     <template v-else>
       <!-- title card -->
-      <div :key="`title-${player.run}`" class="title-card pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-2 bg-[#0b1d28]/80 backdrop-blur-sm">
+      <div v-if="titled" :key="`title-${player.run}`" class="title-card pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-2 bg-[#0b1d28]/80 backdrop-blur-sm" :style="{ animationDelay: `-${titleAge}ms` }">
         <span class="font-black uppercase tracking-[0.2em] text-[#3fe0d0]" :class="big ? 'text-[15px]' : 'text-[11px]'">{{ sceneIcon(scene.kind) }} {{ sceneLabel(scene.kind) }}</span>
         <MathTex v-if="steps.about" :latex="titleTex(steps.about)" class="max-w-[90%] overflow-hidden" :class="big ? 'text-[40px]' : 'text-[22px]'" />
       </div>
 
       <!-- end card -->
       <div v-if="player.finished" class="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-[#0b1d28]/70 backdrop-blur-[2px]" style="animation: rise 500ms both">
-        <span class="font-black text-white/80" :class="big ? 'text-[16px]' : 'text-[12px]'">The answer</span>
-        <span class="rounded-2xl bg-white text-ink shadow-xl" :class="big ? 'px-6 py-3' : 'px-4 py-2'" style="animation: pop 500ms cubic-bezier(0.3, 1.6, 0.5, 1) 0.2s both">
-          <MathTex :latex="steps.result || scene.resultTex" :class="big ? 'text-[34px]' : 'text-[20px]'" />
-        </span>
+        <template v-if="answerTex">
+          <span class="font-black text-white/80" :class="big ? 'text-[16px]' : 'text-[12px]'">The answer</span>
+          <span class="rounded-2xl bg-white text-ink shadow-xl" :class="big ? 'px-6 py-3' : 'px-4 py-2'" style="animation: pop 500ms cubic-bezier(0.3, 1.6, 0.5, 1) 0.2s both">
+            <MathTex :latex="answerTex" :class="big ? 'text-[34px]' : 'text-[20px]'" />
+          </span>
+        </template>
         <button type="button" class="flex items-center gap-2 rounded-full bg-tangerine font-black text-white shadow-lg transition hover:scale-105" :class="big ? 'px-6 py-3 text-[17px]' : 'px-4 py-2 text-[13px]'" @click="start()">
           <svg :width="big ? 20 : 15" :height="big ? 20 : 15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5" /></svg>
           Watch again

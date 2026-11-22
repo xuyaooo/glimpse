@@ -73,6 +73,24 @@ const HINTS = {
     de: 'Ich lese: {text}. Das kann ich noch nicht prüfen.',
     it: 'Leggo: {text}. Non è un calcolo che so controllare.',
   },
+  right_common: {
+    fr: 'Juste ! Des morceaux de même taille : {a} + {b} = {as} + {bs} = {sum}.',
+    en: 'Right! Make the pieces the same size: {a} + {b} = {as} + {bs} = {sum}.',
+    de: 'Richtig! Gleich grosse Stücke: {a} + {b} = {as} + {bs} = {sum}.',
+    it: 'Giusto! Pezzi della stessa grandezza: {a} + {b} = {as} + {bs} = {sum}.',
+  },
+  step_slip: {
+    fr: 'Pas encore : cette ligne ne découle pas de celle du dessus. Vérifie cette étape.',
+    en: "Not yet: this line doesn't follow from the line above. Check that step again.",
+    de: 'Noch nicht: Diese Zeile folgt nicht aus der Zeile darüber. Prüf diesen Schritt noch einmal.',
+    it: 'Non ancora: questa riga non segue da quella sopra. Controlla di nuovo questo passaggio.',
+  },
+  step_carried: {
+    fr: 'Cette ligne découle de celle du dessus, mais il y a une erreur plus haut. Remplace ta réponse dans la première ligne pour vérifier.',
+    en: 'This follows from the line above, but there is a slip higher up. Put your answer back into the first line to check.',
+    de: 'Das folgt aus der Zeile darüber, aber weiter oben steckt ein Fehler. Setz dein Ergebnis in die erste Zeile ein und prüf es.',
+    it: 'Questo segue dalla riga sopra, ma più in alto c’è un errore. Metti la tua risposta nella prima riga per controllare.',
+  },
   wrong_generic: {
     fr: 'Pas encore. Vérifie ton calcul.',
     en: 'Not yet. Check your working.',

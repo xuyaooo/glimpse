@@ -16,6 +16,8 @@ export const player = reactive({
   finished: false,
   /** Bumped at every start, so the title card and confetti replay. */
   run: 0,
+  /** When this run started (Date.now()): its title card shows for its first 1.6 s. */
+  startedAt: 0,
   burst: 0,
   /** A newer animation that arrived while this one was playing (or open full screen). */
   pending: null as WorkedSteps | null,
@@ -117,6 +119,7 @@ export function start(steps?: WorkedSteps, mode?: PlayerMode) {
   player.mode = mode ?? (player.mode === 'full' ? 'full' : 'dock')
   player.playing = true
   player.run++
+  player.startedAt = Date.now()
   stopSpeaking()
   tell(0, true)
 }

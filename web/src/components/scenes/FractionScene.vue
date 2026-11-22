@@ -6,7 +6,7 @@ import type { Scene } from '@/lib/types'
 
 const props = defineProps<{ scene: Scene; stage: number }>()
 const s = computed(() => props.scene as Scene & { n1: number; d1: number; n2: number; d2: number; op: '+' | '-'; l: number; m1: number; m2: number; top: number })
-const st = computed(() => s.value.stages[props.stage] as { cut?: boolean; joined?: boolean })
+const st = computed(() => s.value.stages[props.stage] as { cut?: boolean; joined?: boolean; simple?: { n: number; d: number } })
 const pizza = computed(() => s.value.skin === 'kid')
 const A = '#f47a2a'
 const B = '#7c5ce8'
@@ -46,6 +46,9 @@ const layout = computed(() => {
     labelR: x0 + slot * wl + gap + (slot * wr) / 2,
   }
 })
+// bars: one row per fraction, every whole the same width in both rows (5/4 takes two wholes,
+// so 1/2 gets the same width for its one whole)
+const wholeW = computed(() => 480 / Math.max(wholesOf(left.value), wholesOf(right.value)))
 function pizzas(count: number, x0: number, x1: number, cy: number, rMax: number) {
   const r = Math.min(rMax, (x1 - x0) / count / 2 - 16)
   return Array.from({ length: count }, (_, k) => ({ k, cx: x0 + (x1 - x0) * ((k + 0.5) / count), cy, r }))
@@ -65,6 +68,12 @@ const pieces = (l: number) => {
   const end = l % 100 >= 11 && l % 100 <= 13 ? 'th' : (['th', 'st', 'nd', 'rd'][l % 10] ?? 'th')
   return `${l}${end}s`
 }
+// the answer pill: the sum as counted (6/4), or simplified on the stage that says so (3/2, or 3)
+const answer = computed(() => {
+  const simple = st.value.simple
+  if (!simple) return `${s.value.top}/${s.value.l}`
+  return simple.d === 1 ? `${simple.n}` : `${simple.n}/${simple.d}`
+})
 const joinedFill = (i: number) => {
   if (s.value.op === '-') return i < s.value.top ? A : 'none'
   return i < s.value.m1 ? A : i < s.value.m1 + s.value.m2 ? B : 'none'
@@ -87,7 +96,7 @@ const joinedFill = (i: number) => {
         <g v-for="(f, side) in [left, right]" :key="`${side}-${f.d}-${f.n}`" class="scene-pop" :style="{ animationDelay: `${side * 0.2}s` }">
           <text x="34" :y="side ? 252 : 132" font-size="30" font-weight="900" :fill="side ? B : A" dominant-baseline="central">{{ f.n }}/{{ f.d }}</text>
           <template v-for="w in wholesOf(f)" :key="w">
-            <rect v-for="i in f.d" :key="i" :x="120 + (w - 1) * (480 / wholesOf(f)) + ((i - 1) * (480 / wholesOf(f) - 8)) / f.d" :y="side ? 222 : 102" :width="(480 / wholesOf(f) - 8) / f.d - 3" height="60" rx="6" :fill="(w - 1) * f.d + i <= f.n ? (side ? B : A) : 'none'" :stroke="ink" stroke-opacity="0.45" stroke-width="2" />
+            <rect v-for="i in f.d" :key="i" :x="120 + (w - 1) * wholeW + ((i - 1) * (wholeW - 8)) / f.d" :y="side ? 222 : 102" :width="(wholeW - 8) / f.d - 3" height="60" rx="6" :fill="(w - 1) * f.d + i <= f.n ? (side ? B : A) : 'none'" :stroke="ink" stroke-opacity="0.45" stroke-width="2" />
           </template>
         </g>
       </template>
@@ -107,7 +116,7 @@ const joinedFill = (i: number) => {
       </template>
       <g class="scene-pop" style="animation-delay: 1s">
         <rect x="235" y="330" width="170" height="56" rx="28" fill="#0f7f76" />
-        <text x="320" y="359" font-size="30" font-weight="900" fill="#fff" text-anchor="middle" dominant-baseline="central">{{ s.top }}/{{ s.l }}</text>
+        <text x="320" y="359" font-size="30" font-weight="900" fill="#fff" text-anchor="middle" dominant-baseline="central">{{ answer }}</text>
       </g>
     </template>
   </svg>

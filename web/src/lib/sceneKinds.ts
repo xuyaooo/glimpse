@@ -57,18 +57,20 @@ export const TOPIC: Record<string, string> = {
   units: 'Units and conversions', speed: 'Speed, distance and time', density: 'Floating and sinking', circuit: 'Electric circuits', states: 'States of matter', food_chain: 'Food chains',
 }
 // free text from the summaries ("Integrals (area under a curve, e.g. ...)") -> one of the topics.
+// Whole words where a part of a word would mislead: "Venn diagrams" is not grams (units),
+// "Business maths" is not sine, "paragraph" is not a graph, "individual" is not division.
 // The first rule that matches wins: "Sine, cosine and tangent" is trigonometry, not derivatives,
 // and "what fractions mean" is fractions, not averages.
 const MENTION: [RegExp, string][] = [
-  [/integral|area under/i, 'area'], [/derivative|differentiat|tangent line|slope/i, 'derivative'], [/limit/i, 'limit'], [/trig|sine|cosine|tangent (of|ratio)|unit circle/i, 'trig'],
+  [/integral|area under/i, 'area'], [/derivative|differentiat|tangent line|slope/i, 'derivative'], [/limit/i, 'limit'], [/\btrig|\bsines?\b|cosine|tangent (of|ratio)|unit circle/i, 'trig'],
   [/quadratic|parabola/i, 'quadratic'], [/simultaneous|system/i, 'system'], [/inequal/i, 'inequality'], [/pythag|right(-angled)? triangle|hypotenuse/i, 'pythagoras'],
   [/probab|chance|dice|coin|combination|factorial|tree diagram/i, 'chance'], [/percent/i, 'percent'], [/power|expon|logarithm/i, 'powers'],
   [/fraction|denominator|numerator/i, 'fractions'], [/\bmean\b|average|median/i, 'mean'], [/order of op|bracket/i, 'order_ops'],
-  [/equation|solv(e|ing) for x|unknown/i, 'balance'], [/function|graph/i, 'graph'], [/multipl|times table/i, 'groups'], [/divi|shar/i, 'sharing'],
+  [/equation|solv(e|ing) for x|unknown/i, 'balance'], [/function|\bgraphs?\b/i, 'graph'], [/multipl|times table/i, 'groups'], [/\bdivi|\bshar/i, 'sharing'],
   [/syllable|clap/i, 'syllables'], [/phonic|sound button|digraph/i, 'phonics'], [/spell/i, 'spelling'], [/plural/i, 'plural'], [/sentence|punctuat|capital letter/i, 'sentence'],
-  [/\bunits?\b|conver|metre|gram|litre/i, 'units'], [/speed|distance/i, 'speed'], [/densit|float|sink/i, 'density'], [/circuit|voltage|current|resist|ohm/i, 'circuit'],
+  [/\bunits?\b|conver|metre|\b(?:kilo|milli)?grams?\b|litre/i, 'units'], [/speed|distance/i, 'speed'], [/densit|float|sink/i, 'density'], [/circuit|voltage|current|resist|ohm/i, 'circuit'],
   [/solid|liquid|\bgas\b|melt|boil|states? of matter/i, 'states'], [/food chain|predator|producer|consumer/i, 'food_chain'],
-  [/add|subtract|sum|column/i, 'columns'], [/pattern|1 \+ 2/i, 'pairs'],
+  [/\badd|subtract|\bsums?\b|column/i, 'columns'], [/pattern|1 \+ 2/i, 'pairs'],
 ]
 export function topicOf(text: string): string | null {
   for (const [re, kind] of MENTION) if (re.test(text)) return TOPIC[kind]

@@ -11,6 +11,7 @@ import StudentPickerModal from '@/components/StudentPickerModal.vue'
 import TopBar from '@/components/TopBar.vue'
 import Whiteboard from '@/components/Whiteboard.vue'
 import { state, topicLabel } from '@/lib/engine'
+import { nextTip } from '@/lib/records'
 import { ui } from '@/lib/ui'
 import { useDesk } from '@/lib/useDesk'
 import MathTex from '@/components/MathTex.vue'
@@ -131,8 +132,9 @@ const learned = computed(() => {
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z" /><circle cx="12" cy="13" r="3.6" /></svg>
               Open camera
             </button>
+            <!-- not once the session has ended (its summary is written): new work starts a new one -->
             <button
-              v-if="state.parts.length"
+              v-if="state.parts.length && !state.ended && !state.summary"
               type="button"
               class="inline-flex min-h-10 items-center gap-2 rounded-full border border-line bg-white px-4 text-[14px] font-black transition-transform hover:-translate-y-0.5"
               @click="desk.end"
@@ -182,7 +184,7 @@ const learned = computed(() => {
         :questions="selectedQuestions"
         :topics="work.topics.value"
         :mistakes="work.mistakes.value"
-        :next-text="work.latest.value?.next"
+        :next-text="work.latest.value?.next ? nextTip(work.latest.value.next) : undefined"
         @next="desk.nextStep"
       />
     </div>

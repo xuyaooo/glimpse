@@ -76,9 +76,10 @@ export function useDesk() {
     else openCamera()
   }
 
-  // End of session: Glim writes a summary (SummaryDialog), saved with the history.
+  // End of session: Glim writes a summary (SummaryDialog), saved with the history. Once.
   function end() {
     if (ui.summaryOpen) return // already finishing (Enter on the button behind the summary)
+    if (state.ended || state.summary) return // ended already: the engine keeps the summary it wrote
     state.summary = null
     ui.summaryOpen = true
     endSession()
@@ -133,8 +134,8 @@ export function useDesk() {
     }
     return { now, best }
   })
-  /** A mistake that was taught, then a similar exercise got right. */
-  const fixed = computed(() => state.teachings.some((t) => state.parts.some((p) => p.id > t.partId && p.exerciseId && p.verdict === 'correct')))
+  /** A mistake that was taught, then a line got right after it (one of the similar exercises or not). */
+  const fixed = computed(() => state.teachings.some((t) => state.parts.some((p) => p.id > t.partId && p.verdict === 'correct')))
 
   const greeting = computed(() => {
     const h = new Date().getHours()

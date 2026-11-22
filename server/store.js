@@ -114,7 +114,9 @@ export async function listSessions({ perStudent = 50 } = {}) {
   return rows.map((r) => r.state)
 }
 
-// records: [{ kind, ref, at, data }] (from the engine's state.history)
+// records: [{ kind, ref, at, data }] (from the engine's state.history). A record saved again (a
+// line read again, its answer corrected) keeps the time it was first saved: the session's
+// history stays in the order things happened.
 export async function saveHistory(sessionId, studentId, records) {
   if (!records?.length) return
   const { query } = await db()
@@ -122,7 +124,7 @@ export async function saveHistory(sessionId, studentId, records) {
     await query(
       `insert into glimpse_history (ref, session_id, student_id, kind, at, data)
        values ($1, $2, $3, $4, to_timestamp($5 / 1000.0), $6::jsonb)
-       on conflict (ref) do update set session_id = excluded.session_id, student_id = excluded.student_id, kind = excluded.kind, data = excluded.data, at = excluded.at`,
+       on conflict (ref) do update set session_id = excluded.session_id, student_id = excluded.student_id, kind = excluded.kind, data = excluded.data, at = least(glimpse_history.at, excluded.at)`,
       [textParam(r.ref), textParam(sessionId), textParam(studentId) || 'unknown', textParam(r.kind), r.at || Date.now(), toJson(r.data)],
     )
   }

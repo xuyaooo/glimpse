@@ -11,6 +11,7 @@ import MathTex from '@/components/MathTex.vue'
 import StudentPickerModal from '@/components/StudentPickerModal.vue'
 import TopBar from '@/components/TopBar.vue'
 import { state } from '@/lib/engine'
+import { nextTip } from '@/lib/records'
 import type { Scene, SessionSummary } from '@/lib/types'
 import { ui } from '@/lib/ui'
 import { useDesk } from '@/lib/useDesk'
@@ -26,6 +27,7 @@ interface Record {
 type Record_ = { [k: string]: unknown }
 
 const desk = useDesk()
+const count = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
 const router = useRouter()
 // Searching your exercises happens on My work (as from Home).
 function search(v: string) {
@@ -122,13 +124,13 @@ const str = (v: unknown) => (typeof v === 'string' ? v : '')
           </span>
           <span class="flex flex-col">
             <span class="text-[18px] font-black">{{ s.summary?.title ?? 'Session' }}</span>
-            <span class="text-[13px] font-bold text-ink-2">{{ when(s.at) }} · {{ s.lines.length }} lines · {{ s.questions.length }} questions · {{ s.solutions.length }} solutions</span>
+            <span class="text-[13px] font-bold text-ink-2">{{ when(s.at) }} · {{ count(s.lines.length, 'line') }} · {{ count(s.questions.length, 'question') }} · {{ count(s.solutions.length, 'solution') }}</span>
           </span>
           <svg class="ml-auto transition-transform" :class="open.has(s.id) ? 'rotate-180' : ''" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg>
         </button>
 
         <template v-if="open.has(s.id)">
-          <p v-if="s.summary" class="rounded-2xl bg-[#fff8e6] px-4 py-3 text-[15px] font-bold">{{ s.summary.praise }} <span class="font-semibold text-ink-2">Next time: {{ s.summary.next }}</span></p>
+          <p v-if="s.summary" class="rounded-2xl bg-[#fff8e6] px-4 py-3 text-[15px] font-bold">{{ s.summary.praise }} <span class="font-semibold text-ink-2">Next time: {{ nextTip(s.summary.next) }}</span></p>
 
           <div v-if="s.lines.length" class="flex flex-col gap-2">
             <h3 class="text-[14px] font-black text-ink-2">What you wrote</h3>

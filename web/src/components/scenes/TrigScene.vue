@@ -45,7 +45,8 @@ const fmt = (v: number) => String(+v.toFixed(3))
     </g>
     <g v-if="shown.has(s.fn)" class="scene-pop">
       <text v-if="s.fn === 'sin'" :x="px + (s.cos >= 0 ? 12 : -12)" :y="(py + C.y) / 2" font-size="20" font-weight="900" fill="#f47a2a" :text-anchor="s.cos >= 0 ? 'start' : 'end'" dominant-baseline="central">sin = {{ fmt(s.sin) }}</text>
-      <text v-else-if="s.fn === 'cos'" :x="(C.x + px) / 2" :y="C.y + 26" font-size="20" font-weight="900" fill="#3fe0d0" text-anchor="middle">cos = {{ fmt(s.cos) }}</text>
+      <!-- under the axis; when the point is under it too, the radius is there: under the circle -->
+      <text v-else-if="s.fn === 'cos'" :x="(C.x + px) / 2" :y="s.sin < -1e-9 ? 388 : C.y + 26" font-size="20" font-weight="900" fill="#3fe0d0" text-anchor="middle">cos = {{ fmt(s.cos) }}</text>
       <text v-else x="320" y="388" font-size="20" font-weight="900" fill="#ffd34d" text-anchor="middle">tan = sin ÷ cos = {{ Math.abs(s.cos) < 1e-9 ? 'undefined' : fmt(s.sin / s.cos) }}</text>
     </g>
   </svg>
