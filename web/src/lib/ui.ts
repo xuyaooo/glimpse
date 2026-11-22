@@ -3,6 +3,10 @@ import { reactive } from 'vue'
 
 export const ui = reactive({
   pickerOpen: false,
+  /** The settings window (voice, listening). */
+  settingsOpen: false,
+  /** The end-of-session summary window. */
+  summaryOpen: false,
   /** The line whose reasoning is on show (desk whiteboard, camera overlay). */
   selectedPartId: null as number | null,
   tab: 'summary' as 'summary' | 'explanation',

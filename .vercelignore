@@ -1,0 +1,15 @@
+# Not uploaded to Vercel (paths from the repo root)
+node_modules
+/web/node_modules
+/web/dist
+/web/public/mediapipe
+/engine
+/dist
+/data
+/debug-frames
+/test
+/decide
+/scripts/bench-*.js
+/scripts/analyze-frames.js
+/scripts/engine-smoke.js
+.env*.local

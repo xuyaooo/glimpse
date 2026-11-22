@@ -2,9 +2,9 @@
 // reacting to the engine (hints spoken, the camera opening when the reader isn't sure).
 import { computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { askStart, cutPart, endSession, pickExercise, startSession, state } from './engine'
+import { askEnd, askStart, cutPart, endSession, pickExercise, startSession, state } from './engine'
 import { useManualTriggers } from './keys'
-import { speak } from './speech'
+import { speakAuto } from './speech'
 import { subjectById } from './subjects'
 import { ui } from './ui'
 
@@ -21,16 +21,20 @@ export function useDesk() {
     ui.pickerOpen = true
   }
 
-  // W or holding A goes straight to the camera; letting go of A there sends the question.
-  useManualTriggers({
-    cut: openCamera,
-    askStart: () => {
-      if (!state.student) return
-      openCamera()
-      askStart()
+  // W or holding A goes straight to the camera; letting go of A sends the question (also if it's
+  // let go before the camera page is up). Space is left to scroll the page.
+  useManualTriggers(
+    {
+      cut: openCamera,
+      askStart: () => {
+        if (!state.student) return
+        openCamera()
+        askStart()
+      },
+      askEnd,
     },
-    askEnd: () => {},
-  })
+    { space: false },
+  )
 
   onMounted(() => {
     if (!state.student && typeof route.query.student === 'string') startSession(route.query.student)
@@ -72,10 +76,12 @@ export function useDesk() {
     else openCamera()
   }
 
+  // End of session: Glim writes a summary (SummaryDialog), saved with the history.
   function end() {
-    const id = state.student?.id
+    if (ui.summaryOpen) return // already finishing (Enter on the button behind the summary)
+    state.summary = null
+    ui.summaryOpen = true
     endSession()
-    router.push({ name: 'dashboard', params: { id } })
   }
 
   // ---------------------------------------------------------------- reacting to the engine
@@ -105,11 +111,11 @@ export function useDesk() {
   )
   watch(
     () => state.hint,
-    (h) => h && speak(h.text, h.lang),
+    (h) => h && speakAuto(h.text, h.lang),
   )
   watch(
     () => state.answer,
-    (a) => a && speak(a.text, a.lang),
+    (a) => a && speakAuto(a.text, a.lang),
   )
 
   // ---------------------------------------------------------------- today's numbers

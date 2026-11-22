@@ -3,12 +3,14 @@
 // whether it's right, the explanation (in step with the drawing on the camera), similar
 // exercises, answers to questions, and what's going on.
 import ActivityFeed from './ActivityFeed.vue'
+import StepByStep from './StepByStep.vue'
 import Confetti from '../Confetti.vue'
 import MathTex from '../MathTex.vue'
 import { confirmReply, dismissAnswer, pickExercise, state } from '@/lib/engine'
 import { STYLE_LABEL } from '@/lib/mock'
 import { speak } from '@/lib/speech'
 import type { Hint, Teaching, WrittenPart } from '@/lib/types'
+import { youNote } from '@/lib/useWork'
 
 defineProps<{ selected: WrittenPart | null; teaching: Teaching | null; step: number; crop: string | null; hint: Hint | null }>()
 defineEmits<{ step: [n: number]; replay: []; select: [id: number] }>()
@@ -44,7 +46,7 @@ const BADGE = { correct: 'bg-right-mark', wrong: 'bg-wrong-mark', reading: 'bg-l
         <div class="flex flex-col gap-1.5">
           <figure v-if="crop" :key="crop.length" class="m-0 flex flex-col gap-1.5" style="animation: rise 500ms both">
             <figcaption class="text-[12px] font-black text-ink-2">What the camera saw</figcaption>
-            <img :src="crop" alt="The handwritten line, as the camera saw it" class="max-h-24 w-full rounded-xl border border-line object-contain object-left shadow-sm" />
+            <img :src="crop" alt="The handwritten line, as the camera saw it" class="max-h-44 w-full rounded-xl border border-line object-contain object-left shadow-sm" />
           </figure>
           <svg v-if="crop" class="ml-6" width="20" height="26" viewBox="0 0 20 26" aria-hidden="true"><path class="draw" pathLength="1" style="--dur: 0.4s; --delay: 0.3s" d="M10 2v20M3 15l7 7 7-7" fill="none" stroke="#14A096" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" /></svg>
           <figure class="m-0 flex flex-col gap-1.5">
@@ -57,22 +59,45 @@ const BADGE = { correct: 'bg-right-mark', wrong: 'bg-wrong-mark', reading: 'bg-l
           </figure>
         </div>
 
-        <div v-if="selected.verdict !== 'reading' || state.confirm?.partId === selected.id" class="grid grid-cols-[auto_1fr] items-center gap-3 text-[13px] font-bold text-ink-2">
-          <span class="tabular-nums">Read on this laptop, {{ Math.round(selected.confidence * 100) }}% sure</span>
-          <span class="h-1.5 overflow-hidden rounded-full" :class="selected.confidence < 0.8 ? 'bg-[#fff1c9]' : 'bg-lagoon-soft'">
-            <span class="block h-full rounded-full transition-[width] duration-700" :class="selected.confidence < 0.8 ? 'bg-[#e0a21a]' : 'bg-lagoon'" :style="{ width: `${selected.confidence * 100}%` }" />
-          </span>
-        </div>
-
         <div v-if="state.confirm?.partId === selected.id" class="flex flex-wrap items-center gap-2.5 rounded-2xl bg-[#fff8e6] p-3.5" aria-live="assertive">
           <span class="w-full text-[15px] font-black">I’m not sure I read that right. Did you write this?</span>
           <button type="button" class="btn-lagoon min-h-11 rounded-xl px-5 font-black" @click="confirmReply(true)">Yes</button>
           <button type="button" class="min-h-11 rounded-xl border-2 border-line bg-white px-5 font-black" @click="confirmReply(false)">No, let me fix it</button>
         </div>
-        <p v-if="selected.verdict === 'wrong' && selected.note" class="rounded-2xl bg-wrong-bg px-4 py-2.5 text-[15px] font-bold text-wrong">You {{ selected.note }}.</p>
+        <p v-if="selected.verdict === 'wrong' && selected.note" class="rounded-2xl bg-wrong-bg px-4 py-2.5 text-[15px] font-bold text-wrong">{{ youNote(selected.note) }}</p>
         <p v-else-if="selected.verdict === 'unsure' && selected.note" class="rounded-2xl bg-[#fff4d6] px-4 py-2.5 text-[15px] font-bold text-[#7a4f00]">{{ selected.note.charAt(0).toUpperCase() + selected.note.slice(1) }}.</p>
+
+        <!-- what the tutor says about this line (also spoken) -->
+        <div v-if="hint" class="flex items-start gap-3 rounded-2xl bg-lagoon-mist px-4 py-3" aria-live="polite">
+          <div class="flex-1">
+            <p class="text-[12px] font-black text-lagoon-deep">Glim says</p>
+            <p :lang="hint.lang" class="text-[16px] font-bold leading-snug">{{ hint.text }}</p>
+            <p v-if="hint.translation" lang="en" class="mt-0.5 text-[13px] text-ink-2">{{ hint.translation }}</p>
+          </div>
+          <button type="button" aria-label="Hear it" title="Hear it" class="flex size-9 shrink-0 items-center justify-center rounded-xl bg-white text-lagoon shadow-sm" @click="speak(hint.text, hint.lang)">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5L6 9H3v6h3l5 4z" /><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13" /></svg>
+          </button>
+        </div>
       </div>
     </section>
+
+    <!-- The whole solution, step by step -->
+    <StepByStep v-if="state.steps" :steps="state.steps" />
+
+    <!-- Details: what the camera read, for the curious (and for debugging) -->
+    <details v-if="state.page" class="rounded-[24px] bg-white px-5 py-3 shadow-[0_14px_30px_-22px_rgb(24_41_74/0.5)]">
+      <summary class="cursor-pointer text-[15px] font-black text-ink-2">Details: the whole page, as the camera read it <span class="font-semibold">({{ (state.page.ms / 1000).toFixed(1) }} s)</span></summary>
+      <p v-if="!state.page.lines.length" class="mt-2 text-[14px] font-semibold text-ink-2">I couldn’t see any writing.</p>
+      <ol v-else class="m-0 mt-2 flex list-none flex-col gap-1 p-0">
+        <li v-for="(line, i) in state.page.lines" :key="`${state.page.at}-${i}`" class="flex flex-wrap items-baseline gap-x-1 text-[15px] leading-relaxed">
+          <template v-for="(seg, j) in line" :key="j">
+            <MathTex v-if="seg.t === 'math'" :latex="seg.v" class="text-[18px]" />
+            <span v-else class="font-semibold">{{ seg.v }}</span>
+          </template>
+        </li>
+      </ol>
+      <p v-if="selected" class="mt-2 text-[12px] font-bold text-ink-3">Read on this laptop by GLM-OCR, checked by the tutor model.</p>
+    </details>
 
     <!-- 2. Plain-words log, kept near the top -->
     <ActivityFeed :limit="3" />
@@ -82,6 +107,7 @@ const BADGE = { correct: 'bg-right-mark', wrong: 'bg-wrong-mark', reading: 'bg-l
       <section v-if="state.answer && state.question" aria-label="Your question" class="flex flex-col gap-2.5 rounded-[24px] p-5" style="background: linear-gradient(130deg, #efeaff, #f6f3ff 55%, #eaf1ff)">
         <p class="text-[14px] font-black text-violet">You asked</p>
         <p :lang="state.question.lang" class="-mt-1.5 text-[19px] font-black">« {{ state.question.text }} »</p>
+        <p v-if="state.question.about" class="-mt-1 flex flex-wrap items-center gap-2 text-[14px] font-bold text-ink-2">Pointing at <MathTex :latex="state.question.about" class="text-[20px] text-ink" /></p>
         <p :lang="state.answer.lang" class="text-[16px] font-bold leading-snug">{{ state.answer.text }}</p>
         <p v-if="state.answer.translation" lang="en" class="-mt-1.5 text-[13px] text-ink-2">{{ state.answer.translation }}</p>
         <p v-if="state.answer.visual" class="text-[13px] font-bold text-violet">Drawn on the camera, next to your paper.</p>

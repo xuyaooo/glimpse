@@ -16,12 +16,20 @@ engine/data/
 *.safetensors
 *.mp4
 
-# Secrets (OpenRouter key goes in engine/.env)
+# Secrets: keys go in .env.local (never committed); .env.example only has placeholders
 .env
 .env.*
+!.env.example
 
 # OS / editors
 .DS_Store
 .idea/
 .vscode/*
 !.vscode/extensions.json
+web/public/mediapipe/
+
+# The engine's local data: the database, debug pictures, what Laya learns while it runs
+/data/
+/debug-frames/
+/decide/learned.jsonl*
+.vercel

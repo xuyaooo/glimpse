@@ -1,9 +1,20 @@
 <script setup lang="ts">
+import { onBeforeUnmount, onMounted } from 'vue'
+import FocusTrap from './FocusTrap.vue'
 import Mascot from './Mascot.vue'
 import { students } from '@/lib/mock'
 
-defineProps<{ open: boolean; current?: string }>()
-defineEmits<{ pick: [id: string]; close: [] }>()
+const props = defineProps<{ open: boolean; current?: string }>()
+const emit = defineEmits<{ pick: [id: string]; close: [] }>()
+
+// Escape keeps going as before (only once someone is picked)
+function onKey(e: KeyboardEvent) {
+  if (e.key !== 'Escape' || !props.open || !props.current) return
+  e.stopPropagation()
+  emit('close')
+}
+onMounted(() => window.addEventListener('keydown', onKey, true))
+onBeforeUnmount(() => window.removeEventListener('keydown', onKey, true))
 
 const AVATAR = ['linear-gradient(160deg,#18a99c,#0b6962)', 'linear-gradient(160deg,#ff9b54,#e2601a)', 'linear-gradient(160deg,#a68bff,#6d4bdf)', 'linear-gradient(160deg,#5b8def,#1f5fd6)']
 </script>
@@ -12,7 +23,8 @@ const AVATAR = ['linear-gradient(160deg,#18a99c,#0b6962)', 'linear-gradient(160d
   <Teleport to="body">
     <Transition name="modal">
       <div v-if="open" class="fixed inset-0 z-50 flex items-center justify-center bg-[#0d2230]/40 p-4 backdrop-blur-md">
-        <div role="dialog" aria-modal="true" aria-labelledby="picker-title" class="modal-window card w-full max-w-[880px] p-6 text-center sm:p-9">
+        <FocusTrap>
+        <div role="dialog" aria-modal="true" aria-labelledby="picker-title" tabindex="-1" class="modal-window card w-full max-w-[880px] p-6 text-center outline-none sm:p-9">
           <div class="flex justify-center"><Mascot :size="110" wave /></div>
           <h2 id="picker-title" class="mt-2 text-[32px] font-black tracking-[-0.015em] sm:text-[38px]">Who's writing today?</h2>
           <p class="mx-auto mt-1 max-w-[520px] text-[17px] font-semibold text-ink-2">Pick your name. Glimpse explains things in your language.</p>
@@ -32,6 +44,7 @@ const AVATAR = ['linear-gradient(160deg,#18a99c,#0b6962)', 'linear-gradient(160d
           </ul>
           <button v-if="current" type="button" class="mt-6 text-[15px] font-black text-marker underline decoration-2 underline-offset-4" @click="$emit('close')">Keep going as before</button>
         </div>
+        </FocusTrap>
       </div>
     </Transition>
   </Teleport>

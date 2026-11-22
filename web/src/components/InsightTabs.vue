@@ -15,7 +15,12 @@ const props = defineProps<{
   next: Exercise | null
   questions: { question: Question; answer: Answer }[]
   step: number
+  /** From the saved work: the kinds of maths practised, mistakes with a tip, what to do next. */
+  topics?: { label: string; icon: string; n: number }[]
+  mistakes?: { what: string; tip: string }[]
+  nextText?: string
 }>()
+const fractionsTopic = computed(() => !props.topics?.length || props.topics.some((t) => /fraction/i.test(t.label)))
 defineEmits<{ 'update:tab': [tab: 'summary' | 'explanation']; 'update:step': [n: number]; next: [] }>()
 
 const styles = computed(() =>
@@ -66,7 +71,24 @@ const styles = computed(() =>
           </p>
         </div>
 
-        <div class="flex flex-col gap-2.5">
+        <div v-if="topics?.length" class="flex flex-col gap-2.5">
+          <h3 class="text-lg font-black">Topics you practised</h3>
+          <div class="flex flex-wrap gap-2">
+            <span v-for="(t, i) in topics" :key="t.label" class="inline-flex items-center gap-1.5 rounded-full bg-marker-soft px-3 py-1.5 text-[14px] font-black text-marker" :style="{ animation: `pop 400ms ${i * 0.06}s both` }">
+              <span aria-hidden="true">{{ t.icon }}</span>{{ t.label }}<span v-if="t.n > 1" class="rounded-full bg-white px-1.5 text-[11px]">×{{ t.n }}</span>
+            </span>
+          </div>
+        </div>
+
+        <div v-if="mistakes?.length" class="flex flex-col gap-2.5">
+          <h3 class="text-lg font-black">Watch out for</h3>
+          <div v-for="(m, i) in mistakes" :key="i" class="rounded-2xl border border-line px-4 py-3" :style="{ animation: `rise 450ms ${i * 0.08}s both` }">
+            <p class="text-[14px] font-bold">{{ m.what }}</p>
+            <p class="mt-1 flex gap-2 text-[14px] font-semibold text-lagoon-deep"><span aria-hidden="true">💡</span>{{ m.tip }}</p>
+          </div>
+        </div>
+
+        <div v-if="fractionsTopic" class="flex flex-col gap-2.5">
           <h3 class="flex items-center gap-2 text-lg font-black">
             <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a7 7 0 0 0-4 12.7V17a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1v-2.3A7 7 0 0 0 12 2z" fill="#FFC93C" /><path d="M9 20h6v1a1 1 0 0 1-1 1h-4a1 1 0 0 1-1-1z" fill="#5b6b84" /></svg>
             Key ideas
@@ -98,7 +120,7 @@ const styles = computed(() =>
           <span class="flex min-w-0 flex-1 flex-col">
             <span class="text-[16px] font-black">Next step</span>
             <span v-if="next" class="flex flex-wrap items-center gap-1.5 text-[14px] font-semibold text-ink-2">Try <MathTex :latex="`${next.latex}=`" class="text-[16px] text-ink" /></span>
-            <span v-else class="text-[14px] font-semibold text-ink-2">Write a new line on your paper</span>
+            <span v-else class="text-[14px] font-semibold text-ink-2">{{ nextText || 'Write a new line on your paper' }}</span>
           </span>
           <span class="flex size-10 shrink-0 items-center justify-center rounded-full bg-marker text-white transition-transform duration-300 group-hover:translate-x-1">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" /></svg>

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { topicLabel } from '@/lib/engine'
 // "Continue your practice": the paper on the desk, the subject and topic, how far today got,
 // and Continue, which opens the camera.
 import { computed, onBeforeUnmount, ref } from 'vue'
@@ -71,7 +72,7 @@ const DOT = { correct: 'bg-right-mark', wrong: 'bg-wrong-mark', reading: 'bg-lag
         <Transition name="fade" mode="out-in">
           <div :key="subject.id" class="flex flex-col items-start gap-1.5">
             <span class="rounded-full bg-marker-soft px-3 py-1 text-[15px] font-black text-marker">{{ subject.name }}</span>
-            <span class="text-[26px] font-black leading-tight">{{ subject.topic }}</span>
+            <span class="text-[26px] font-black leading-tight">{{ topicLabel(subject.topic) }}</span>
           </div>
         </Transition>
         <span class="text-[17px] font-semibold text-ink-2">{{ progress }}</span>

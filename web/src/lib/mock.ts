@@ -9,13 +9,15 @@ export interface Student {
   lang: string
   language: string
   tone: 'pen' | 'marker' | 'plain'
+  /** Years: decides how the animations look and how simply Glim talks. */
+  age: number
 }
 
 export const students: Student[] = [
-  { id: 'amara', name: 'Amara', lang: 'fr', language: 'Français', tone: 'pen' },
-  { id: 'luca', name: 'Luca', lang: 'it', language: 'Italiano', tone: 'marker' },
-  { id: 'selin', name: 'Selin', lang: 'tr', language: 'Türkçe', tone: 'plain' },
-  { id: 'noor', name: 'Noor', lang: 'en', language: 'English', tone: 'pen' },
+  { id: 'amara', name: 'Amara', lang: 'fr', language: 'Français', tone: 'pen', age: 9 },
+  { id: 'luca', name: 'Luca', lang: 'it', language: 'Italiano', tone: 'marker', age: 10 },
+  { id: 'selin', name: 'Selin', lang: 'tr', language: 'Türkçe', tone: 'plain', age: 7 },
+  { id: 'noor', name: 'Noor', lang: 'en', language: 'English', tone: 'pen', age: 11 },
 ]
 
 export const STYLE_LABEL: Record<TeachStyle, string> = {

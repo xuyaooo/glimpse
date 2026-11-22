@@ -18,6 +18,102 @@ export interface WrittenPart {
   exerciseId?: string
   /** x, y, w, h in normalised camera coordinates (live camera only). */
   box?: [number, number, number, number]
+  /** The photo this line was read from (JPEG data URL, the whole frame, never cropped). */
+  crop?: string
+  at: number
+}
+
+/** One step of an animation: what Glim says, and the maths written at that step. */
+export interface SceneStage {
+  caption: string
+  math?: string
+  [k: string]: unknown
+}
+
+/**
+ * A ready-made animation, picked by the decision model (Laya) and computed by the engine
+ * (server/engine/scenes.js). The web app draws it; the AI never writes drawing code.
+ * skin: kid (objects, pizzas), junior (bars, blocks), grown (graphs, algebra).
+ */
+export interface Scene {
+  kind:
+    | 'count' | 'number_line' | 'columns' | 'groups' | 'area_model' | 'sharing' | 'fractions' | 'percent' | 'order_ops' | 'powers'
+    | 'mean' | 'balance' | 'inequality' | 'pythagoras' | 'pairs' | 'quadratic' | 'system' | 'graph' | 'trig' | 'limit' | 'derivative'
+    | 'area' | 'chance' | 'combinations' | 'tree'
+  skin: 'kid' | 'junior' | 'grown'
+  stages: SceneStage[]
+  resultTex: string
+  decidedBy?: 'laya' | 'rules' | 'model'
+  laya?: { kind: string; probability: number; ms: number } | null
+  [k: string]: unknown
+}
+
+/** How a session went, written by the tutor at the end (stars are counted, not invented). */
+export interface SessionSummary {
+  title: string
+  praise: string
+  practised: string[]
+  mistakes: { what: string; tip: string }[]
+  next: string
+  for_adults: string
+  minutes: number
+  lines: number
+  right: number
+  wrong: number
+  questions: number
+  stars: number
+  lang: string
+  name?: string
+  at: number
+  /** Exercises to practise next time (shown in My work). */
+  review?: ReviewItem[]
+}
+
+/** An exercise suggested after a session: one done that day again, or with new numbers. */
+export interface ReviewItem {
+  id: string
+  /** The exercise, as LaTeX (no answer). */
+  exercise: string
+  /** again: one that went wrong or wasn't finished; same: new numbers; harder: a step further; idea: the tutor's. */
+  level: 'again' | 'same' | 'harder' | 'idea'
+  why: string
+  kind: string | null
+  /** Worked out by code (LaTeX), or null when the code can't check it. */
+  answer: string | null
+  scene: Scene | null
+  done?: boolean
+}
+
+/** The exercises suggested after one finished session. */
+export interface SessionReview {
+  ref: string
+  sessionId: string
+  at: number
+  title: string
+  items: ReviewItem[]
+}
+
+/** A whole solution, worked out by the tutor: what each step does, and the line written. */
+export interface WorkedSteps {
+  /** The exercise, as LaTeX. */
+  about: string
+  title: string
+  items: { say: string; math: string }[]
+  /** The final answer, as LaTeX. */
+  result: string
+  lang: string
+  at: number
+  /** The animation that explains it, when one fits. */
+  scene?: Scene
+  /** 'question': the child asked about it (the animation opens by itself). */
+  reason?: 'line' | 'question'
+}
+
+/** The whole paper as the OCR model read it: lines of text and maths pieces. */
+export interface PageText {
+  lines: { t: 'text' | 'math'; v: string }[][]
+  /** How long the OCR took. */
+  ms: number
   at: number
 }
 
@@ -77,6 +173,8 @@ export interface Question {
   lang: string
   final: boolean
   pointedAt?: { partId: number; token: string }
+  /** What the finger pointed at, as LaTeX (read from the page). */
+  about?: string
 }
 
 export interface Answer extends Hint {
@@ -94,9 +192,14 @@ export type EngineEvent =
   | { type: 'hint'; hint: Hint | null }
   | { type: 'question'; question: Question }
   | { type: 'answer'; answer: Answer }
+  | { type: 'page'; page: PageText }
+  | { type: 'steps'; steps: WorkedSteps }
+  | { type: 'summary'; summary: SessionSummary }
+  /** What kind of maths is on the paper (recognised by Laya), e.g. { kind: 'area', label: 'Integrals' }. */
+  | { type: 'topic'; topic: { kind: string; label: string } }
 
 export type ClientEvent =
-  | { type: 'session_start'; student: string; name: string; lang: string; subject: SubjectId }
+  | { type: 'session_start'; student: string; name: string; lang: string; subject: SubjectId; age?: number }
   /** The child picked another subject on the desk ("Choose a practice"). */
   | { type: 'subject'; subject: SubjectId }
   /**
@@ -112,4 +215,11 @@ export type ClientEvent =
   | { type: 'ask_start' }
   | { type: 'ask_end' }
   | { type: 'question_typed'; text: string; partId?: number }
+  /**
+   * The child points at the paper (fingertip found in the browser) and maybe typed a question.
+   * image: the whole frame, never cropped; x, y: the fingertip, 0-1 in that image.
+   */
+  | { type: 'point'; image: string; x?: number; y?: number; text?: string }
   | { type: 'session_end' }
+  /** The learner's age changed (Settings). */
+  | { type: 'set_age'; age: number }

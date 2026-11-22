@@ -39,6 +39,7 @@ Three pages in the sidebar, plus the camera window.
 - **Right, digital**: what the camera saw for the line (a crop of the real handwriting) → what was read, typeset, with how sure the reader is; right or not yet and why; **What's going on** in plain words; the explanation steps in time with the drawing; similar exercises; every line.
 - Top bar: pick the camera, **Read when I lift my pencil** (the browser notices the pencil stop moving; on by default with a real engine, off in demo mode), turn the picture upside down, print the sheet, full screen.
 - It opens by itself when the reader isn't sure ("Did you write this?") or when the child starts asking.
+- **Finish** ends the session and shows its summary (pressed again, the same summary). After that, the next line read or question asked starts a new session for the same child, with no photos or animation from the one before.
 
 ## My work (`/work`)
 

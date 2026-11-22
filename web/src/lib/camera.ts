@@ -28,14 +28,21 @@ export function useCamera() {
   const deviceId = ref('')
   const label = ref('')
   const message = ref('')
+  // Bumped by stop(): a start() still waiting for the camera then gives it back (the page was
+  // left while "Opening the camera…", or another start() replaced it).
+  let gen = 0
+  let disposed = false
 
   function stop() {
+    gen++
     stream.value?.getTracks().forEach((t) => t.stop())
     stream.value = null
   }
 
   async function start(id = remembered()) {
     stop()
+    if (disposed) return
+    const my = gen
     if (!navigator.mediaDevices?.getUserMedia) {
       status.value = 'missing'
       message.value = window.isSecureContext
@@ -49,13 +56,17 @@ export function useCamera() {
         video: { deviceId: id ? { ideal: id } : undefined, width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30 } },
         audio: false,
       })
+      if (my !== gen) {
+        s.getTracks().forEach((t) => t.stop())
+        return
+      }
       stream.value = s
       const track = s.getVideoTracks()[0]
       deviceId.value = track.getSettings().deviceId ?? ''
       label.value = track.label || 'Camera'
-      devices.value = (await navigator.mediaDevices.enumerateDevices())
-        .filter((d) => d.kind === 'videoinput')
-        .map((d, i) => ({ id: d.deviceId, label: d.label || `Camera ${i + 1}` }))
+      const all = await navigator.mediaDevices.enumerateDevices()
+      if (my !== gen) return
+      devices.value = all.filter((d) => d.kind === 'videoinput').map((d, i) => ({ id: d.deviceId, label: d.label || `Camera ${i + 1}` }))
       status.value = 'live'
       // First time here: prefer the Logitech Brio if it's plugged in.
       if (!id) {
@@ -64,6 +75,7 @@ export function useCamera() {
       }
       remember(deviceId.value)
     } catch (e) {
+      if (my !== gen) return
       const name = e instanceof DOMException ? e.name : ''
       const text = e instanceof Error ? e.message : ''
       if (name === 'NotAllowedError' && /system/i.test(text)) {
@@ -83,7 +95,10 @@ export function useCamera() {
     }
   }
 
-  onBeforeUnmount(stop)
+  onBeforeUnmount(() => {
+    disposed = true
+    stop()
+  })
   return { stream, status, devices, deviceId, label, message, start, stop }
 }
 

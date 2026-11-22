@@ -18,6 +18,7 @@ Maths travels as LaTeX: `\frac{3}{4}+\frac{1}{2}=\frac{4}{6}`. Fractions are nev
 | `pick_exercise` | `id` | the child chose the next similar exercise |
 | `ask_start` / `ask_end` | | manual trigger for a question (the engine normally detects pointing + speech itself) |
 | `question_typed` | `text`, `partId?` | development: ask without speech |
+| `point` | `image`, `x?`, `y?`, `text?` | the child points at the paper and holds still (hand tracking in the browser), or presses Ask: the whole frame (never cropped), the fingertip (0-1 in that frame) and the typed question. The engine reads the whole page with the OCR model, then the tutor gets the photo (fingertip marked), the text and the question |
 | `session_end` | | "End session" |
 
 ## Engine → web
@@ -34,6 +35,8 @@ Maths travels as LaTeX: `\frac{3}{4}+\frac{1}{2}=\frac{4}{6}`. Fractions are nev
 | `hint` | `hint: {text, lang, translation?}` or `null` | what Glimpse says, shown and spoken |
 | `question` | `question: {text, lang, final, pointedAt?: {partId, token}}` | live transcript and pointed target |
 | `answer` | `answer: {text, lang, translation?, visual?}` | the answer to a question |
+| `page` | `page: {lines: [[{t: 'text' or 'math', v}]], ms, at}` | the whole paper as the OCR model read it ("The whole page" card) |
+| `steps` | `steps: {about, title, items: [{say, math}], result, lang, at}` | the whole solution of the newest unfinished or wrong line, or of what was pointed at, worked out by the tutor ("Step by step" card, one step at a time) |
 
 `style` is one of `pictures`, `bars`, `steps`, `number_line`. `name` in a misconception is phrased to follow "you", e.g. `added the tops and the bottoms`.
 

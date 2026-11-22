@@ -1,9 +1,17 @@
 <script setup lang="ts">
+import { titleTex } from '@/lib/latex'
 // The left half of the scan window: the live camera, with the tutor drawing on top of it.
 import { computed, ref, watch } from 'vue'
 import ArLayer from './ArLayer.vue'
+import HandOverlay from './HandOverlay.vue'
 import Mascot from '../Mascot.vue'
+import MathTex from '../MathTex.vue'
 import PaperSheet from '../PaperSheet.vue'
+import { dismissAnswer, state as engine } from '@/lib/engine'
+import { listenStatus } from '@/lib/listen'
+import { player } from '@/lib/player'
+import SceneVideo from '../scenes/SceneVideo.vue'
+import type { Pt } from '@/lib/hands'
 import type { CameraStatus } from '@/lib/camera'
 import { sheetRect } from '@/lib/geometry'
 import { useElementWidth } from '@/lib/useElementWidth'
@@ -28,8 +36,15 @@ const props = defineProps<{
   autoRead: boolean
   name: string
   crops: Record<number, string>
+  hands?: Pt[][]
+  tip?: Pt | null
+  dwell?: number
+  handStatus?: 'off' | 'loading' | 'on' | 'error'
 }>()
 const emit = defineEmits<{ video: [el: HTMLVideoElement]; retry: []; usePaper: []; select: [id: number] }>()
+
+// the animation's video card sits on the camera; the speech bubbles make room for it
+const docked = computed(() => player.mode === 'poster' || player.mode === 'dock')
 
 const captured = computed(() => props.parts.filter((p) => props.crops[p.id]))
 const RING = { correct: 'ring-right-mark', wrong: 'ring-wrong-mark', reading: 'ring-lagoon-bright', unsure: 'ring-[#e0a21a]' }
@@ -61,6 +76,8 @@ function onMeta() {
 
 const live = computed(() => !props.paper && props.camera === 'live')
 const listening = computed(() => props.asking || props.status === 'answering')
+// Glim's answer stays on the picture until "Got it" (unless it's drawn there as a scene)
+const answered = computed(() => !listening.value && !!props.answer && !!props.question && !props.answer.visual)
 const pointing = computed(() => (listening.value || props.answer ? (props.question?.pointedAt ?? null) : null))
 const readingLine = computed(() => props.parts.find((p) => p.verdict === 'reading')?.id)
 
@@ -73,7 +90,9 @@ const paperBox = computed(() => {
 
 const hint = computed(() => {
   if (!props.parts.length) return 'Put your paper under the camera, then write line 1'
-  if (props.autoRead && live.value) return props.moving ? 'Writing…' : 'Lift your pencil when the line is done'
+  if (props.status === 'listening') return 'Listening: say your question'
+  if (props.tip) return 'Pointing: hold still, then say your question'
+  if (props.autoRead && live.value) return props.moving ? 'Writing…' : 'Lift your pencil when the line is done, or point to ask'
   return 'Press W or “Read my line now” when the line is done'
 })
 </script>
@@ -105,7 +124,10 @@ const hint = computed(() => {
         :answer="answer"
         :pointing="pointing"
         :marks="!paper"
+        :slots="paper || engine.connection !== 'live'"
       />
+
+      <HandOverlay v-if="live && hands" :vw="vw" :vh="vh" :hands="hands" :tip="tip ?? null" :dwell="dwell ?? 0" :asking="asking" :listening="status === 'listening'" />
 
       <!-- what's happening, on the picture -->
       <div class="pointer-events-none absolute inset-x-3 top-3 flex flex-wrap items-start justify-between gap-2">
@@ -116,6 +138,8 @@ const hint = computed(() => {
           </span>
           {{ live ? 'Live' : 'Demo paper' }}
           <span class="font-semibold text-white/80">{{ hint }}</span>
+          <span v-if="live && handStatus === 'loading'" class="font-semibold text-white/60">· hand tracking starting…</span>
+          <span v-else-if="live && handStatus === 'on'" class="font-semibold text-[#3fe0d0]">· {{ hands?.length ? `${hands.length} hand${hands.length > 1 ? 's' : ''}` : 'no hand' }}</span>
         </span>
         <Transition name="fade" mode="out-in">
           <span v-if="readingLine" key="r" class="rounded-full bg-[#3fe0d0] px-3.5 py-2 text-[13px] font-black text-[#0b1d28]">Reading line {{ readingLine }}</span>
@@ -123,18 +147,38 @@ const hint = computed(() => {
         </Transition>
       </div>
 
+      <!-- the animation, as a video card on the camera -->
+      <Transition name="dock">
+        <div v-if="docked" class="absolute bottom-3 right-3 z-30 w-[54%] min-w-[300px] max-w-[680px]">
+          <SceneVideo size="dock" />
+        </div>
+      </Transition>
+
       <!-- shutter flash when a line is captured -->
       <span v-if="flash" :key="flash" class="pointer-events-none absolute inset-0 bg-white" style="animation: shutter 420ms ease-out both" aria-hidden="true" />
 
       <Transition name="fade">
-        <div v-if="listening" class="absolute inset-x-3 bottom-3 z-20 flex items-end gap-3">
+        <div v-if="listening" class="absolute bottom-3 left-3 z-20 flex items-end gap-3 transition-all duration-500" :style="{ right: docked ? 'calc(54% + 24px)' : '12px' }">
           <Mascot :size="58" />
           <div class="relative flex-1 rounded-3xl rounded-bl-md bg-white/95 px-5 py-3 shadow-xl backdrop-blur" aria-live="polite">
-            <p :lang="question?.lang" class="text-[19px] font-black leading-snug">{{ question?.text ? `« ${question.text} »` : 'Listening' }}</p>
-            <p class="mt-0.5 text-[14px] font-semibold text-ink-2">{{ question?.pointedAt ? `About line ${question.pointedAt.partId}${question.pointedAt.token ? `, the ${question.pointedAt.token}` : ''}` : 'Point at your paper while you ask' }}</p>
+            <p :lang="question?.lang" class="text-[19px] font-black leading-snug">{{ question?.text && question.text !== '…' ? `« ${question.text} »` : status !== 'listening' ? (status === 'answering' ? 'Reading your paper…' : 'Listening') : listenStatus.phase === 'speaking' ? 'I’m listening…' : listenStatus.phase === 'writing' ? 'Writing down your question…' : 'I’m listening: what’s your question?' }}</p>
+            <p v-if="question?.about" class="mt-0.5 flex flex-wrap items-center gap-2 text-[14px] font-semibold text-ink-2">About <MathTex :latex="titleTex(question.about)" class="text-[18px] text-ink" /></p>
+            <p v-else class="mt-0.5 text-[14px] font-semibold text-ink-2">{{ question?.pointedAt ? `About line ${question.pointedAt.partId}${question.pointedAt.token ? `, the ${question.pointedAt.token}` : ''}` : status === 'answering' ? 'Glim is looking at the photo' : status === 'listening' ? (listenStatus.model === 'loading' ? `Getting my ears ready, the first time only: ${Math.round(listenStatus.progress * 100)}%` : 'Say it out loud. Stop talking and I’ll send it with the photo') : 'Point at your paper while you ask' }}</p>
             <span v-if="asking" class="absolute right-5 top-4 flex h-6 items-end gap-1" aria-hidden="true">
-              <span v-for="(h, i) in [8, 18, 24, 12, 20, 9]" :key="i" class="wave-bar w-1 rounded-sm bg-tangerine" :style="{ height: `${h}px`, animationDelay: `${i * 90}ms` }" />
+              <span v-for="(h, i) in [8, 18, 24, 12, 20, 9]" :key="i" class="w-1 rounded-sm bg-tangerine transition-[height] duration-100" :class="status === 'listening' ? '' : 'wave-bar'" :style="{ height: status === 'listening' ? `${4 + h * Math.min(1, listenStatus.level * (0.6 + ((i * 7) % 5) / 6))}px` : `${h}px`, animationDelay: `${i * 90}ms` }" />
             </span>
+          </div>
+        </div>
+      </Transition>
+
+      <Transition name="fade">
+        <div v-if="answered" class="absolute bottom-3 left-3 z-20 flex items-end gap-3 transition-all duration-500" :style="{ right: docked ? 'calc(54% + 24px)' : '12px' }">
+          <Mascot :size="58" />
+          <div class="relative flex-1 rounded-3xl rounded-bl-md bg-white/95 px-5 py-3 shadow-xl backdrop-blur" aria-live="polite">
+            <p v-if="question?.about" class="flex flex-wrap items-center gap-2 text-[13px] font-black text-violet">About <MathTex :latex="titleTex(question.about)" class="text-[16px] text-ink" /></p>
+            <p :lang="answer?.lang" class="text-[17px] font-bold leading-snug">{{ answer?.text }}</p>
+            <p v-if="answer?.translation" lang="en" class="mt-0.5 text-[13px] text-ink-2">{{ answer.translation }}</p>
+            <button type="button" class="absolute -top-3 right-4 rounded-full bg-violet px-3 py-1 text-[13px] font-black text-white shadow" @click="dismissAnswer">Got it</button>
           </div>
         </div>
       </Transition>
@@ -167,7 +211,8 @@ const hint = computed(() => {
         <p class="max-w-[420px] text-xl font-black leading-snug">{{ message }}</p>
         <div class="flex flex-wrap justify-center gap-3">
           <button type="button" class="btn-lagoon min-h-12 rounded-2xl px-5 font-black" @click="emit('retry')">Try again</button>
-          <button type="button" class="min-h-12 rounded-2xl bg-white/15 px-5 font-black text-white ring-1 ring-white/30 transition hover:bg-white/25" @click="emit('usePaper')">Use the demo paper</button>
+          <!-- the drawn paper only works with the scripted demo tutor: a real one needs the camera -->
+          <button v-if="engine.connection === 'demo'" type="button" class="min-h-12 rounded-2xl bg-white/15 px-5 font-black text-white ring-1 ring-white/30 transition hover:bg-white/25" @click="emit('usePaper')">Use the demo paper</button>
         </div>
       </template>
     </div>

@@ -18,6 +18,8 @@ const props = defineProps<{
   answer: Answer | null
   pointing: { partId: number; token: string } | null
   marks: boolean
+  /** Place lines in the printed sheet's slots when the engine gives no box (demo). */
+  slots?: boolean
 }>()
 
 const sheet = computed(() => sheetRect(props.vw, props.vh))
@@ -29,7 +31,9 @@ const onSheet = computed(() => {
   const last = props.parts[props.parts.length - 1]
   if (!last) return []
   const page = Math.floor((last.id - 1) / SLOTS)
-  return props.parts.filter((p) => Math.floor((p.id - 1) / SLOTS) === page).map((p) => ({ p, r: slotRect(sheet.value, p.id) }))
+  return props.parts
+    .filter((p) => Math.floor((p.id - 1) / SLOTS) === page && (p.box || props.slots !== false))
+    .map((p) => ({ p, r: p.box ? { x: p.box[0] * props.vw, y: p.box[1] * props.vh, w: p.box[2] * props.vw, h: p.box[3] * props.vh } : slotRect(sheet.value, p.id) }))
 })
 
 const panel = computed(() => {

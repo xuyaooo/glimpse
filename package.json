@@ -1,0 +1,39 @@
+{
+  "name": "glimpse",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Glimpse: a webcam maths tutor. Web app (web/), engine (server/), decision model Laya (decide/).",
+  "scripts": {
+    "setup": "npm install && npm --prefix web ci",
+    "setup:decide": "python3.15 -m venv decide/.venv || python3 -m venv decide/.venv; decide/.venv/bin/pip install -r decide/requirements.txt",
+    "dev": "concurrently -k -n engine,glimpse,decide -c blue,magenta,yellow \"node --watch server/index.js\" \"GLIMPSE_ENGINE=http://localhost:3001 npm --prefix web run dev\" \"node scripts/start-decide.js\"",
+    "server": "node server/index.js",
+    "build": "npm --prefix web run build",
+    "start": "npm --prefix web run build && node server/index.js",
+    "test": "node --test \"test/**/*.test.js\"",
+    "e2e": "node scripts/e2e.mjs",
+    "e2e:failures": "node scripts/e2e-failures.mjs",
+    "sweep": "node scripts/sweep-animations.mjs",
+    "bench:paper": "node scripts/bench-paper.js 40 1000",
+    "bench:tutor": "node scripts/bench-tutor.js"
+  },
+  "dependencies": {
+    "@electric-sql/pglite": "^0.5.17",
+    "@mediapipe/tasks-vision": "^1.2.3",
+    "@neondatabase/serverless": "^1.2.1",
+    "express": "^5.3.0",
+    "jpeg-js": "^0.4.4",
+    "katex": "^0.19.1",
+    "markdown-it": "^15.0.3",
+    "vue": "^3.5.46",
+    "ws": "^8.23.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.5",
+    "@vitejs/plugin-vue": "^6.0.11",
+    "concurrently": "^10.0.7",
+    "tailwindcss": "^4.3.5",
+    "vite": "^8.3.8"
+  }
+}

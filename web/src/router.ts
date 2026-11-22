@@ -7,6 +7,8 @@ export const router = createRouter({
   routes: [
     { path: '/', name: 'home', component: HomeView, meta: { title: 'Home' } },
     { path: '/work', name: 'work', component: () => import('@/views/WorkView.vue'), meta: { title: 'My work' } },
+    { path: '/animations', name: 'animations', component: () => import('@/views/AnimationsView.vue'), meta: { title: 'Animations' } },
+    { path: '/history', name: 'history', component: () => import('@/views/HistoryView.vue'), meta: { title: 'History' } },
     { path: '/scan', name: 'scan', component: () => import('@/views/ScanView.vue'), meta: { title: 'Scan your paper' } },
     { path: '/dashboard/:id?', name: 'dashboard', component: () => import('@/views/DashboardView.vue'), props: true, meta: { title: 'Tutor view' } },
     { path: '/worksheet', name: 'worksheet', component: () => import('@/views/WorksheetView.vue'), meta: { title: 'Printable sheet' } },

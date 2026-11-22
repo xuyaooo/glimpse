@@ -1,3 +1,9 @@
+<script lang="ts">
+// The session the line photos (ui.crops) and the animation card belong to. It outlives this
+// page, so coming back to the camera in the same session keeps them.
+let shownSession = -1
+</script>
+
 <script setup lang="ts">
 // Open camera: a whole window. Left, the live camera with the tutor drawing on it.
 // Right, the digital side: what was read, whether it's right, why, and what's going on.
@@ -8,14 +14,20 @@ import CameraView from '@/components/scan/CameraView.vue'
 import DigitalPanel from '@/components/scan/DigitalPanel.vue'
 import { log } from '@/lib/activity'
 import { grab, useCamera } from '@/lib/camera'
-import { askEnd, askStart, cutPart, startSession, state } from '@/lib/engine'
+import { askEnd, askStart, beginListening, cutPart, endSession, pointAt, setDraftQuestion, startSession, state, topicLabel } from '@/lib/engine'
+import { canListen, preloadListener, startListening } from '@/lib/listen'
+import { warmUpListening } from '@/lib/warmup'
+import { close as closePlayer, offer, player as anim } from '@/lib/player'
+import { useHands, type Pt } from '@/lib/hands'
 import { sheetRect, slotRect } from '@/lib/geometry'
 import { useManualTriggers } from '@/lib/keys'
 import { usePencilLift } from '@/lib/pencilLift'
-import { speak } from '@/lib/speech'
+import { preloadVoice, speakAuto, stopSpeaking } from '@/lib/speech'
+import { settings } from '@/lib/settings'
 import { subjectById } from '@/lib/subjects'
 import { ui } from '@/lib/ui'
 import { useStepPlayer } from '@/lib/useStepPlayer'
+import type { EngineState } from '@/lib/types'
 
 const router = useRouter()
 const route = useRoute()
@@ -23,17 +35,21 @@ const cam = useCamera()
 const video = ref<HTMLVideoElement | null>(null)
 const paper = ref('paper' in route.query)
 const rotated = ref(false)
-const autoRead = ref(false)
+// "Read when I lift my pencil": saved in Settings, so it stays as the child left it. The
+// scripted demo stays manual, so a stray hand movement can't skip ahead.
+const autoRead = computed({
+  get: () => settings.readOnLift && state.connection === 'live',
+  set: (v: boolean) => (settings.readOnLift = v),
+})
 const flash = ref(0)
 const fullscreen = ref(false)
-
-// With a real engine, reading on pencil-lift is on by default. The demo script stays manual
-// so a stray hand movement can't skip ahead.
-watch(
-  () => state.connection,
-  (c) => c === 'live' && (autoRead.value = true),
-  { immediate: true },
-)
+const questionText = ref('')
+/** The microphone is recording the child's question (whatever the engine says it is doing). */
+const recording = ref(false)
+const shownStatus = computed<EngineState>(() => (recording.value ? 'listening' : state.status))
+/** Finish was pressed: the session has its summary. A new line or question starts a new session. */
+const ended = ref(false)
+let alive = true
 
 const subject = computed(() => subjectById(state.subject))
 const live = computed(() => !paper.value && cam.status.value === 'live')
@@ -47,48 +63,195 @@ const player = useStepPlayer(
 
 // ------------------------------------------------------------------ capturing a line
 
+// After Finish, the summarised session is over: what the child does next goes into a new one.
+function resume() {
+  if (ended.value && state.student) startSession(state.student.id)
+}
+
 function capture() {
-  if (!state.student || state.asking || state.confirm) return
+  if (!state.student || state.asking || ui.summaryOpen) return
+  // The reader asked "Did you write this?" about a line: show that question, it comes first.
+  if (state.confirm) return void (ui.selectedPartId = state.confirm.partId)
+  // A line is being read or checked: one read at a time.
+  if (state.status === 'reading' || state.status === 'thinking') return
+  resume()
   flash.value++
   const v = video.value
   let image: string | undefined
   if (live.value && v?.videoWidth) {
-    // A crop of just this line, to show next to what was read...
-    ui.pendingCrop = grab(v, slotRect(sheetRect(v.videoWidth, v.videoHeight), state.parts.length + 1), rotated.value, 900, 0.9)
-    // ...and, for a real engine, the whole frame to read from.
+    // A real engine gets the whole frame (never cropped) and sends back the photo each line was
+    // read from. The demo script shows a crop of the slot the line should be in.
     if (state.connection === 'live') image = grab(v, null, rotated.value) ?? undefined
+    else ui.pendingCrop = grab(v, slotRect(sheetRect(v.videoWidth, v.videoHeight), state.parts.length + 1), rotated.value, 900, 0.9)
   }
   cutPart(image)
 }
 
-const { moving } = usePencilLift(video, () => live.value && autoRead.value && state.status === 'watching' && !state.asking && !state.confirm, capture)
-useManualTriggers({ cut: capture, askStart, askEnd })
+// ------------------------------------------------------------------ pointing and asking
+
+// With the real engine and the camera: point at the paper and hold still (or press A, or the
+// Ask button). The whole frame + where the finger is + the typed question go to the engine:
+// the OCR model reads the page, then the tutor answers with the photo, the text and the question.
+const realEngine = computed(() => live.value && state.connection === 'live')
+const hands = useHands(video, {
+  enabled: () => live.value && !!state.student && !ui.summaryOpen,
+  rotated: () => rotated.value,
+  onPoint: (tip) => realEngine.value && !anim.playing && canAsk() && ask(tip),
+})
+
+// Point (or press Ask / hold A or the mic): the photo is taken at once, then the microphone
+// listens to the question; when the child stops talking, the question goes with the photo.
+// A typed question is sent straight away.
+let voice: { stop: () => void } | null = null
+/** A question ask() sent, waiting for its answer. */
+let pointing = false
+/** What Glim had to say while the microphone was recording: said once it stops. */
+let deferred: { text: string; lang: string } | null = null
+watch(
+  () => state.asking,
+  (a) => !a && (pointing = false),
+)
+// Whether ask() would take a question now (pointing that would be refused is not "Got it!").
+const canAsk = () => !!state.student && !state.asking && state.status !== 'answering' && !ui.summaryOpen && !!video.value?.videoWidth
+async function ask(tip: Pt | null, { continuous = false } = {}) {
+  const v = video.value
+  if (!canAsk() || !v) return
+  const image = grab(v, null, rotated.value)
+  if (!image) return
+  resume()
+  flash.value++
+  let text = questionText.value.trim()
+  questionText.value = ''
+  if (!text && canListen && (continuous || settings.listenAfterPointing)) {
+    stopSpeaking() // so the microphone doesn't hear Glim
+    const before = state.status
+    beginListening()
+    const listening = startListening(state.lang, setDraftQuestion, { continuous })
+    voice = listening
+    recording.value = true
+    text = await listening.done
+    voice = null
+    recording.value = false
+    // The page was left, or the session finished, while the child was talking: send nothing.
+    if (!alive || ui.summaryOpen) return dropQuestion(before)
+    sayDeferred()
+  }
+  pointing = true
+  pointAt(image, tip, text)
+}
+function dropQuestion(before: EngineState) {
+  deferred = null
+  state.asking = false
+  state.question = null
+  if (state.status === 'listening') state.status = before === 'listening' ? 'watching' : before
+}
+function onAskStart() {
+  if (ui.summaryOpen) return
+  if (realEngine.value) ask(hands.recentTip(), { continuous: true })
+  else {
+    resume()
+    askStart()
+  }
+}
+function onAskEnd() {
+  if (voice) return voice.stop()
+  // The engine itself is listening (A was held on the desk, or before the camera was on):
+  // letting go sends the question, as it does without the camera.
+  if (!pointing) askEnd()
+}
+
+const { moving } = usePencilLift(
+  video,
+  () =>
+    live.value &&
+    autoRead.value &&
+    (state.status === 'watching' || (ended.value && state.status === 'idle')) &&
+    !state.asking &&
+    !state.confirm &&
+    !hands.busy() &&
+    !anim.playing &&
+    !ui.summaryOpen,
+  capture,
+)
+useManualTriggers({ cut: capture, askStart: onAskStart, askEnd: onAskEnd })
 
 // ------------------------------------------------------------------ reacting to the engine
 
+// A new session (another child, or "Start a new session") starts with no line photos and no
+// animation card from the one before.
+watch(
+  () => state.startedAt,
+  (at) => {
+    if (at === shownSession) return
+    shownSession = at
+    ui.crops = {}
+    ui.pendingCrop = null
+    ended.value = false
+    if (anim.mode !== 'full' && (anim.mode || anim.pending)) {
+      anim.pending = null
+      closePlayer()
+    }
+  },
+  { immediate: true },
+)
 watch(
   () => state.parts.length,
   (n, old) => {
     if (n <= (old ?? 0)) return
     const p = state.parts[n - 1]
     ui.selectedPartId = p.id
-    if (ui.pendingCrop) {
+    if (p.crop) ui.pendingCrop = null
+    else if (ui.pendingCrop) {
       ui.crops[p.id] = ui.pendingCrop
       ui.pendingCrop = null
     }
   },
 )
+// A worked solution with an animation appears as a video card on the camera, ready to play:
+// it never pops up by itself. The second message for the same solution (the tutor's written
+// steps) updates it without restarting it.
+watch(
+  () => state.steps,
+  (st) => st?.scene && offer(st),
+)
+function finish() {
+  if (ui.summaryOpen) return // already finishing (Enter on the button behind the summary)
+  if (ended.value) return void (ui.summaryOpen = true) // finished already: its summary again
+  voice?.stop() // a question being said now is dropped: ask() sees the summary open
+  ended.value = true
+  state.summary = null
+  ui.summaryOpen = true
+  endSession()
+}
+
+// The photo each line was read from, sent by the engine (new line, or a line that changed).
+watch(
+  () => state.parts.map((p) => p.crop),
+  () => state.parts.forEach((p) => p.crop && (ui.crops[p.id] = p.crop)),
+)
 watch(
   () => state.teaching,
   (t) => t && (ui.selectedPartId = t.partId),
 )
+// Not over Glim telling an animation, nor over the summary. While the microphone records the
+// child's question, Glim waits (it would be heard as part of the question) and speaks after.
+function say(text: string, lang: string) {
+  if (anim.playing || ui.summaryOpen) return
+  if (recording.value) deferred = { text, lang }
+  else speakAuto(text, lang)
+}
+function sayDeferred() {
+  const d = deferred
+  deferred = null
+  if (d) say(d.text, d.lang)
+}
 watch(
   () => state.hint,
-  (h) => h && speak(h.text, h.lang),
+  (h) => h && say(h.text, h.lang),
 )
 watch(
   () => state.answer,
-  (a) => a && speak(a.text, a.lang),
+  (a) => a && say(a.text, a.lang),
 )
 
 // ------------------------------------------------------------------ window
@@ -111,27 +274,43 @@ async function switchCamera(id: string) {
   await cam.start(id)
 }
 
+let autoplay = 0
 onMounted(async () => {
+  preloadVoice()
+  if (settings.listenAfterPointing) {
+    preloadListener(state.lang)
+    warmUpListening()
+  }
   window.addEventListener('keydown', onKey)
   document.addEventListener('fullscreenchange', onFullscreen)
   if (!state.student && typeof route.query.student === 'string') startSession(route.query.student)
   if (!state.student) return void router.replace({ name: 'home' })
+  if (state.summary || ui.summaryOpen) ended.value = true // finished on the desk
   if (!paper.value) {
     await cam.start()
     if (cam.status.value === 'live') log('camera', `Camera on: ${cam.label.value}.`, 'The video stays in this browser. Only a line you finish is read.')
   }
   // `?autoplay`: hands-free demo, a line every few seconds.
-  if ('autoplay' in route.query) {
+  if ('autoplay' in route.query && alive) {
     let lines = 0
     const tick = () => {
-      if (lines++ >= 5 || state.confirm) return
+      if (!alive || lines++ >= 5 || state.confirm) return
       capture()
-      window.setTimeout(tick, 4200)
+      autoplay = window.setTimeout(tick, 4200)
     }
-    window.setTimeout(tick, 1800)
+    autoplay = window.setTimeout(tick, 1800)
   }
 })
 onBeforeUnmount(() => {
+  // Leaving: the microphone stops now, and nothing more is sent from this page.
+  alive = false
+  voice?.stop()
+  window.clearTimeout(autoplay)
+  // Leaving the camera closes its animation card, and any newer one waiting to be shown.
+  if (anim.mode !== 'full') {
+    anim.pending = null
+    closePlayer()
+  }
   window.removeEventListener('keydown', onKey)
   document.removeEventListener('fullscreenchange', onFullscreen)
   if (document.fullscreenElement) document.exitFullscreen().catch(() => {})
@@ -163,7 +342,7 @@ const STATUS: Record<string, string> = {
               <span class="flex size-6 items-center justify-center rounded-full" :style="{ background: subject.bg }">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path :d="subject.icon" /></svg>
               </span>
-              {{ subject.name }}, {{ subject.topic.toLowerCase() }}
+              {{ subject.name }}, {{ topicLabel(subject.topic).toLowerCase() }}
             </span>
           </h1>
           <p class="text-[14px] font-semibold text-ink-2">{{ state.student?.name }}, write a line, then lift your pencil.</p>
@@ -182,19 +361,22 @@ const STATUS: Record<string, string> = {
           type="button"
           role="switch"
           :aria-checked="autoRead"
-          :disabled="!live"
+          :disabled="!live || state.connection !== 'live'"
           class="flex min-h-10 items-center gap-2.5 rounded-full bg-white px-3.5 text-[14px] font-bold shadow-sm disabled:opacity-50"
           title="Reads a line by itself when you stop writing"
           @click="autoRead = !autoRead"
         >
-          <span class="relative h-5 w-9 rounded-full transition-colors" :class="autoRead ? 'bg-lagoon' : 'bg-line'">
-            <span class="absolute top-0.5 size-4 rounded-full bg-white shadow transition-transform duration-300" :class="autoRead ? 'translate-x-[18px]' : 'translate-x-0.5'" />
+          <span class="relative block h-6 w-11 shrink-0 rounded-full transition-colors duration-300" :class="autoRead ? 'bg-lagoon' : 'bg-line'" aria-hidden="true">
+            <span class="absolute left-0.5 top-0.5 block size-5 rounded-full bg-white shadow-md transition-transform duration-300 ease-[cubic-bezier(0.3,1.5,0.5,1)]" :class="autoRead ? 'translate-x-5' : 'translate-x-0'" />
           </span>
           Read when I lift my pencil
           <span v-if="autoRead && live" class="size-2 rounded-full transition-colors" :class="moving ? 'bg-tangerine' : 'bg-right-mark'" :title="moving ? 'Writing' : 'Still'" />
         </button>
         <button type="button" :aria-pressed="rotated" :disabled="!live" title="Turn the picture upside down" aria-label="Turn the picture upside down" class="flex size-10 items-center justify-center rounded-full bg-white shadow-sm transition-transform hover:rotate-180 disabled:opacity-50" :class="rotated ? 'text-lagoon ring-2 ring-lagoon' : ''" @click="rotated = !rotated">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.3-5.6M20 4v4h-4" /></svg>
+        </button>
+        <button type="button" aria-label="Settings" title="Settings: voice, listening" class="flex size-10 items-center justify-center rounded-full bg-white shadow-sm transition-transform hover:rotate-45" @click="ui.settingsOpen = true">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" /></svg>
         </button>
         <a href="/worksheet" target="_blank" class="inline-flex min-h-10 items-center gap-2 rounded-full bg-white px-3.5 text-[14px] font-bold text-ink no-underline shadow-sm">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9V3h12v6" /><rect x="3" y="9" width="18" height="8" rx="2" /><path d="M6 14h12v7H6z" /></svg>
@@ -223,12 +405,17 @@ const STATUS: Record<string, string> = {
         :question="state.question"
         :answer="state.answer"
         :asking="state.asking"
-        :status="state.status"
+        :status="shownStatus"
         :flash="flash"
         :moving="moving"
         :auto-read="autoRead"
         :name="state.student?.name ?? ''"
         :crops="ui.crops"
+        :hands="hands.hands.value"
+        :tip="hands.tip.value"
+        :dwell="hands.dwell.value"
+        :hand-status="hands.status.value"
+
         @select="(id) => (ui.selectedPartId = id)"
         @video="(el) => (video = el)"
         @retry="cam.start()"
@@ -252,13 +439,33 @@ const STATUS: Record<string, string> = {
           <span class="absolute inline-flex size-full animate-ping rounded-full opacity-60" :class="state.asking ? 'bg-tangerine' : 'bg-lagoon-bright'" />
           <span class="relative size-3 rounded-full" :class="state.asking ? 'bg-tangerine' : 'bg-lagoon-bright'" />
         </span>
-        {{ state.connection === 'offline' ? 'The tutor stopped. Restart the engine.' : STATUS[state.status] }}
+        {{ state.connection === 'offline' ? 'The tutor stopped. Restart the engine.' : STATUS[shownStatus] }}
       </span>
       <span v-if="state.connection === 'demo'" class="rounded-full bg-line-2 px-2.5 py-0.5 text-[12px] font-black text-ink-2">Demo tutor</span>
-      <span class="hidden text-[13px] font-semibold text-ink-3 md:inline">Keyboard: W reads a line, hold A to ask, Esc goes home</span>
+      <span class="hidden text-[13px] font-semibold text-ink-3 xl:inline">{{ realEngine ? 'Point at your paper, hold still, then say your question. W reads a line, hold A to talk, Esc goes home' : 'Keyboard: W reads a line, hold A to ask, Esc goes home' }}</span>
       <div class="ml-auto flex flex-wrap gap-2">
+        <button v-if="state.parts.length || state.questions.length" type="button" class="min-h-11 rounded-xl border-2 border-line bg-white px-4 text-[14px] font-black transition-transform hover:-translate-y-0.5" title="End the session and see how it went" @click="finish">Finish</button>
         <button type="button" class="btn-lagoon min-h-11 rounded-xl px-4 text-[14px] font-black transition-transform hover:-translate-y-0.5 active:scale-95" @click="capture">Read my line now</button>
+        <form v-if="realEngine" class="flex min-h-11 items-center gap-1 rounded-xl border-2 border-line bg-white pl-3 pr-1" @submit.prevent="ask(hands.recentTip())">
+          <label for="question" class="sr-only">Your question</label>
+          <input id="question" v-model="questionText" type="text" autocomplete="off" placeholder="Your question (optional), then point" class="w-[230px] bg-transparent text-[14px] font-semibold outline-none" />
+          <button type="submit" :disabled="state.asking" class="min-h-9 rounded-lg bg-tangerine px-3.5 text-[14px] font-black text-white disabled:opacity-50">{{ shownStatus === 'listening' ? 'Listening…' : state.asking ? 'Thinking…' : 'Ask' }}</button>
+        </form>
         <button
+          v-if="realEngine && canListen"
+          type="button"
+          class="flex min-h-11 select-none items-center gap-2 rounded-xl px-4 text-[14px] font-black transition-colors"
+          :class="recording ? 'bg-tangerine text-white' : 'border-2 border-line bg-white'"
+          title="Hold and say your question (point at the paper too)"
+          @pointerdown.prevent="onAskStart"
+          @pointerup="onAskEnd"
+          @pointerleave="recording && onAskEnd()"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5 11a7 7 0 0 0 14 0M12 18v3" /></svg>
+          {{ recording ? 'Listening, let go to send' : 'Hold to talk' }}
+        </button>
+        <button
+          v-else
           type="button"
           class="min-h-11 select-none rounded-xl px-4 text-[14px] font-black transition-colors"
           :class="state.asking ? 'bg-tangerine text-white' : 'border-2 border-line bg-white'"

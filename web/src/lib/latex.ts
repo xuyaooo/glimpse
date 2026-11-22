@@ -28,5 +28,29 @@ export function parseSum(latex: string): { a: [number, number]; b: [number, numb
   return { a: n(t[0]), b: n(t[2]), ans: n(t[4]) }
 }
 
+/**
+ * The same text for a line of LaTeX and for what a child types to find it: \frac{1}{2} and 1/2,
+ * \times, \cdot, ×, * and 6x89 all as ×, \div and ÷ as /, no spaces or braces, lower case.
+ */
+export function searchKey(s: string) {
+  return s
+    .replace(FRAC, '$1/$2')
+    .replace(/\\times|\\cdot|[×·*]/g, '×')
+    .replace(/(\d)\s*[xX]\s*(?=\d)/g, '$1×')
+    .replace(/\\div|÷/g, '/')
+    .replace(/\\left|\\right|\\[,;:! ]|[\s{}$]/g, '')
+    .toLowerCase()
+}
+
 export const frac = (n: number, d: number) => `\\frac{${n}}{${d}}`
 export const sum = (a: [number, number], b: [number, number], ans?: [number, number]) => `${frac(...a)}+${frac(...b)}${ans ? `=${frac(...ans)}` : ''}`
+
+// An exercise's title as LaTeX: maths stays maths, words stay words. "sum of 7 with two dice"
+// rendered as maths loses its spaces (sumof7withtwodice), so word titles become \text{...}.
+const MATH_WORDS = /^(sin|cos|tan|log|lim|sqrt|frac|dfrac|int|exp|ln|cases|begin|end|text|times|div|cdot|infty|circ|binom|left|right|dx|dy|to|pi|le|ge|leq|geq|neq|approx|underbrace|quad)$/i
+export function titleTex(about: string | undefined | null) {
+  const t = String(about ?? '').trim()
+  if (!t || t.includes('\\text{')) return t
+  const words = t.replace(/\\[a-zA-Z]+/g, ' ').match(/[a-zA-Z]{3,}/g) ?? []
+  return words.some((w) => !MATH_WORDS.test(w)) ? `\\text{${t.replace(/[{}\\]/g, '')}}` : t
+}

@@ -3,12 +3,15 @@ import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import Mascot from './Mascot.vue'
 import { state } from '@/lib/engine'
+import { ui } from '@/lib/ui'
 
 const route = useRoute()
 
 const items = computed(() => [
   { label: 'Home', to: { name: 'home' }, active: route.name === 'home', icon: 'home' },
   { label: 'My work', to: { name: 'work' }, active: route.name === 'work', icon: 'work' },
+  { label: 'History', to: { name: 'history' }, active: route.name === 'history', icon: 'history' },
+  { label: 'Animations', to: { name: 'animations' }, active: route.name === 'animations', icon: 'animations' },
   { label: 'Tutor view', to: { name: 'dashboard', params: { id: state.student?.id } }, active: route.name === 'dashboard', icon: 'progress' },
 ])
 
@@ -41,11 +44,17 @@ const toNext = computed(() => (points.value % PER_LEVEL) / PER_LEVEL)
       >
         <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" class="shrink-0 transition-transform duration-300 group-hover:scale-110">
           <path v-if="item.icon === 'home'" d="M11.3 3.3a1 1 0 0 1 1.4 0l8 7.4a1 1 0 0 1-.7 1.7H19v7.1a1.5 1.5 0 0 1-1.5 1.5H15v-5h-6v5H6.5A1.5 1.5 0 0 1 5 19.5v-7.1H4a1 1 0 0 1-.7-1.7z" />
+          <path v-else-if="item.icon === 'animations'" d="M4 5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2zm6 3.5v7l6-3.5z" />
+          <path v-else-if="item.icon === 'history'" d="M12 3a9 9 0 1 1-8.5 6h2.2A7 7 0 1 0 12 5V3zm-1 4h2v5.2l3.6 2.1-1 1.7L11 13.4zM2 4l4 1-1 4z" />
           <path v-else-if="item.icon === 'work'" d="M15.6 3.6a2 2 0 0 1 2.8 0l2 2a2 2 0 0 1 0 2.8L9.2 19.6 4 20.9l1.3-5.2zM14.2 6.4l3.4 3.4" />
           <path v-else d="M4 20V14h3.5v6zm6.2 0V9h3.5v11zm6.3 0V4H20v16z" />
         </svg>
         <span class="max-lg:hidden">{{ item.label }}</span>
       </RouterLink>
+      <button type="button" class="group flex min-h-12 items-center gap-3.5 rounded-full px-4 text-left text-[16px] font-bold text-white/90 transition-all duration-300 hover:translate-x-1 hover:bg-white/10" @click="ui.settingsOpen = true">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="shrink-0 transition-transform duration-300 group-hover:rotate-45"><circle cx="12" cy="12" r="3" /><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1" /></svg>
+        <span class="max-lg:hidden">Settings</span>
+      </button>
     </nav>
 
     <!-- Alps at the bottom of the sidebar, with the flag -->
