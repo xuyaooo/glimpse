@@ -6,7 +6,7 @@
 //      stacked fraction (top, bar, bottom) stays one line.
 //   3. The new line = the lowest one that doesn't overlap a line already read.
 //   4. Read it with the OCR model, and map its outline back onto the video (`box`).
-import { decodeJpeg, resizeRgba, cropToDataUrl, toJpegBase64 } from '../images.js'
+import { decodeJpeg, resizeRgba, rotateRgba, cropToDataUrl, toJpegBase64 } from '../images.js'
 import { detectPaper } from '../vision/paperDetect.js'
 import { flatSize, warpQuad, computeHomography, applyHomography } from '../vision/paper.js'
 import { findBlocks, toGray } from '../vision/layout.js'
@@ -64,6 +64,15 @@ const OCR_PROMPT_GENERIC =
 
 // Z.ai's GLM-OCR answers in Markdown: headings, pictures and HTML tables become plain lines
 // (a table's cells one per line), like the local GLM-OCR's text.
+// A line's maths written plainly, whichever GLM-OCR read it (the cloud one spaces it out):
+// a label inside the maths goes before it ("$$5) 8 + 8 = 61$$" -> "5) $$8 + 8 = 61$$"), and
+// "1 2" is 12 (LaTeX ignores that space), "\frac {" is "\frac{".
+export function tidyMath(line) {
+  return String(line)
+    .replace(/^(\$+)\s*(\(?(?:[a-z]|\d{1,2})[).:])\s*/i, '$2 $1')
+    .replace(/(\${1,2})([^$]+)\1/g, (_m, d, body) => `${d}${body.replace(/\\(frac|sqrt)\s+\{/g, '\\$1{').replace(/(\d)\s+(?=\d)/g, '$1').trim()}${d}`)
+}
+
 export function markdownLines(md) {
   return String(md || '')
     .replace(/<\/(?:td|th|tr|p|div|li)>|<br\s*\/?>/gi, '\n')
@@ -240,16 +249,51 @@ const LABEL_ONLY = /^\(?(?:[a-z]|\d{1,2})[).:]$/i
 // a line without its maths markers ($, $$, \( \)) or spaces at the ends
 const bare = (l) => String(l).trim().replace(/^\$+|\$+$/g, '').replace(/^\\\(|\\\)$/g, '').trim()
 const opTex = (o) => (o === '+' ? '+' : /^[-−–]$/.test(o) ? '-' : '\\times')
+// \frac{A}{B} split into A and B (nested braces counted), or null
+function fracParts(t) {
+  const m = /^\\frac\s*/.exec(t)
+  if (!m) return null
+  const parts = []
+  let i = m[0].length
+  for (let k = 0; k < 2; k++) {
+    while (t[i] === ' ') i++
+    if (t[i] !== '{') return null
+    let depth = 0
+    const start = i
+    for (; i < t.length; i++) {
+      if (t[i] === '{') depth++
+      else if (t[i] === '}' && --depth === 0) break
+    }
+    if (depth !== 0) return null
+    parts.push(t.slice(start + 1, i).trim())
+    i++
+  }
+  return t.slice(i).trim() ? null : parts
+}
+// "\frac{\frac{34}{+25}}{59}" (a column sum read as fractions, bar by bar) -> rows 34, +25, 59
+function fracRows(t) {
+  const p = fracParts(t)
+  return p ? [...(fracRows(p[0]) ?? [p[0]]), ...(fracRows(p[1]) ?? [p[1]])] : null
+}
 // rows of an array/aligned block ("\begin{array}{r} 34 \\ +25 \\ \hline 59 \end{array}") as lines
-function arrayRows(line) {
+function arrayRows(line, cloud = false) {
+  const lm = cloud && String(line).trim().match(LABEL)
+  const bars = cloud ? fracRows(bare(lm ? String(line).trim().slice(lm[0].length) : line).replace(/\s+/g, ' ')) : null
+  // a fraction with an operator row inside is a column sum (a plain 3/4 stays a fraction)
+  if (bars && bars.length >= 3 && bars.every((r) => COL_NUM.test(r.replace(/\s/g, '')) || OP_LINE.test(r.replace(/\s+/g, ' ').replace(/^([+\-−–×*·])\s*/, '$1')))) {
+    const clean = bars.map((r) => r.replace(/\s/g, ''))
+    return [`${lm ? lm[0] : ''}${clean[0]}`, ...clean.slice(1)]
+  }
   const m = bare(line).match(/^\\begin\{(array|aligned|matrix)\}(?:\{[^}]*\})?([\s\S]*)\\end\{\1\}$/)
   if (!m) return [line]
   const rows = m[2].split(/\\\\|\\hline/).map((r) => r.replace(/&/g, '').trim()).filter(Boolean)
   return rows.length >= 2 && rows.every((r) => COL_NUM.test(r) || OP_LINE.test(r)) ? rows : [line]
 }
-/** The OCR lines, with every sum written in columns joined into one line. */
-export function joinColumnSums(lines) {
-  const rows = lines.flatMap(arrayRows)
+/** The OCR lines, with every sum written in columns joined into one line. cloud: the cloud
+ * GLM-OCR's shapes too (labels alone on a line, column sums as nested fractions); the local
+ * GLM-OCR's reading is left as it was. */
+export function joinColumnSums(lines, { cloud = false } = {}) {
+  const rows = (cloud ? joinLabels(lines) : lines).flatMap((l) => arrayRows(l, cloud))
   const opAt = (k) => k < rows.length && (OP_LINE.test(bare(rows[k])) || FRAC_OP.test(bare(rows[k])))
   // a number followed by an operator line starts a column sum
   const startsSum = (k) => k < rows.length && COL_NUM.test(bare(rows[k])) && opAt(k + 1)
@@ -328,6 +372,28 @@ export function joinWrappedLines(lines) {
     else out.push(line)
   }
   return out
+}
+
+/** A label alone on its line ("1)") goes with the exercise under it: "1) $3 + 4 = 7$". */
+export function joinLabels(lines) {
+  const out = []
+  for (let i = 0; i < lines.length; i++) {
+    const l = String(lines[i]).trim()
+    const next = lines[i + 1]
+    if (LABEL_ONLY.test(bare(l)) && next != null && !LABEL_ONLY.test(bare(next)) && !String(next).trim().match(LABEL)) {
+      out.push(`${bare(l)} ${String(next).trim()}`)
+      i++
+    } else out.push(lines[i])
+  }
+  return out
+}
+
+/** A page read bottom to top (seen with the cloud GLM-OCR on a sheet upside down): its labels go
+ * 6, 5, 4... The lines are put back in order when 3 or more labels all go down. */
+export function inReadingOrder(lines) {
+  const labels = lines.map((l) => String(l).trim().match(/^\(?(\d{1,2})[).:]/)?.[1]).filter(Boolean).map(Number)
+  const down = labels.length >= 3 && labels.every((n, i) => i === 0 || n < labels[i - 1])
+  return down ? [...lines].reverse() : lines
 }
 
 /** A column sum the OCR squashed into a division ("a) 34 ÷ 59": the second number and the bar lost). */
@@ -420,9 +486,33 @@ export { toJpegBase64 }
 export async function readFrame(frame) {
   const b64 = Buffer.from(frame).toString('base64')
   const ocr = await ocrImage(b64, 800)
-  let lines = joinWrappedLines(joinColumnSums(cleanOcrLines(ocr.text)))
+  // the cloud GLM-OCR (Z.ai) only: its own way of writing the page is put right; the local
+  // GLM-OCR's reading is used as it always was
+  const cloud = isLayoutParsing(roleConfig('ocr'))
+  const linesOf = (text) =>
+    cloud ? inReadingOrder(joinWrappedLines(joinColumnSums(cleanOcrLines(text).map(tidyMath), { cloud }))) : joinWrappedLines(joinColumnSums(cleanOcrLines(text)))
+  let lines = linesOf(ocr.text)
   let ms = ocr.ms
   let reread = null
+  // The cloud GLM-OCR (Z.ai) reads a sheet lying sideways as (almost) nothing, where the local one
+  // reads it: the whole frame (never cut) is read again a quarter turn each way, the best kept.
+  if (cloud && lines.length < 2) {
+    try {
+      const img = decodeJpeg(frame)
+      for (const turns of [1, 3]) {
+        const again = await ocrImage(toJpegBase64(rotateRgba(img, turns), 90), 800)
+        ms += again.ms
+        const turned = linesOf(again.text)
+        if (turned.length > lines.length) {
+          lines = turned
+          reread = again.text
+        }
+        if (lines.length >= 3) break
+      }
+    } catch {
+      // keep the first read
+    }
+  }
   // A column sum squashed into "34 ÷ 59": the whole frame is read once more, smaller (still the
   // whole frame: seen on test sheets, the smaller read keeps each number of a column on its line).
   const squashed = lines.filter(squashedColumn).length
@@ -430,7 +520,7 @@ export async function readFrame(frame) {
     try {
       const img = decodeJpeg(frame)
       const again = await ocrImage(toJpegBase64(resizeRgba(img, Math.round(Math.max(img.width, img.height) * 0.6)), 90), 800)
-      const lines2 = joinWrappedLines(joinColumnSums(cleanOcrLines(again.text)))
+      const lines2 = linesOf(again.text)
       ms += again.ms
       reread = again.text
       if (lines2.filter(squashedColumn).length < squashed && lines2.length >= lines.length) lines = lines2

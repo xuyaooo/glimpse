@@ -122,3 +122,24 @@ export function drawRing(img, cx, cy, radius, thickness, [r, g, b]) {
 export function toJpegBase64(img, quality = 88) {
   return Buffer.from(jpeg.encode({ data: img.data, width: img.width, height: img.height }, quality).data).toString('base64')
 }
+
+// An RGBA image turned clockwise by `turns` quarter turns (the whole frame, nothing cut).
+export function rotateRgba(img, turns) {
+  const t = ((turns % 4) + 4) % 4
+  if (t === 0) return img
+  const { width: w, height: h, data } = img
+  const W = t === 2 ? w : h
+  const H = t === 2 ? h : w
+  const out = new Uint8Array(W * H * 4)
+  for (let y = 0; y < h; y++)
+    for (let x = 0; x < w; x++) {
+      const [X, Y] = t === 1 ? [h - 1 - y, x] : t === 2 ? [w - 1 - x, h - 1 - y] : [y, w - 1 - x]
+      const i = (y * w + x) * 4
+      const j = (Y * W + X) * 4
+      out[j] = data[i]
+      out[j + 1] = data[i + 1]
+      out[j + 2] = data[i + 2]
+      out[j + 3] = data[i + 3]
+    }
+  return { width: W, height: H, data: out }
+}

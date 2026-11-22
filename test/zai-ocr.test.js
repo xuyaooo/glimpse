@@ -28,3 +28,12 @@ test('the page goes to layout_parsing (data URL, then bare base64) and comes bac
   assert.deepEqual(seen.map((x) => [x.url, x.auth, x.model]), [['/api/paas/v4/layout_parsing', 'Bearer test-key', 'glm-ocr'], ['/api/paas/v4/layout_parsing', 'Bearer test-key', 'glm-ocr']])
   assert.match(seen[0].file, /^data:image\/jpeg;base64,/)
 })
+
+test('the cloud GLM-OCR shapes are put right (only for it: the local reading is left as it was)', async () => {
+  const { joinColumnSums, tidyMath, inReadingOrder } = await import('../server/engine/reader.js')
+  const lines = ['1)', '$$1 2 - 5 = 8$$', '$$5) 8 + 8 = 6 1$$', '$$\\frac {\\frac {3 4}{+ 2 5}}{5 9}$$', '$$\\frac{3}{4}$$']
+  assert.deepEqual(joinColumnSums(lines.map(tidyMath), { cloud: true }), ['1) $$12 - 5 = 8$$', '5) $$8 + 8 = 61$$', '$34 + 25 = 59$', '$$\\frac{3}{4}$$'])
+  assert.deepEqual(joinColumnSums(['1)', '$$3 + 4 = 7$$']), ['1)', '$$3 + 4 = 7$$']) // local: unchanged
+  assert.deepEqual(inReadingOrder(['3) $a$', '2) $b$', '1) $c$']), ['1) $c$', '2) $b$', '3) $a$'])
+  assert.deepEqual(inReadingOrder(['1) $a$', '2) $b$', '3) $c$']), ['1) $a$', '2) $b$', '3) $c$'])
+})
