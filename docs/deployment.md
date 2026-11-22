@@ -12,10 +12,11 @@ The app and the engine deploy together on Vercel's free Hobby plan. The app beco
    ```
    AI_BASE_URL   = https://openrouter.ai/api/v1
    AI_API_KEY    = <your OpenRouter key>
-   OCR_MODEL     = qwen/qwen3.8-flash
-   TUTOR_MODEL   = anthropic/claude-haiku-5.5
+   OCR_MODEL     = google/gemini-2.5-flash-lite
+   TUTOR_MODEL   = google/gemini-2.5-flash-lite
    AI_THINK_OFF  = {"reasoning":{"enabled":false}}
    ```
+   Measured on OpenRouter (Nov 2026, test sheets): Gemini 2.5 Flash-Lite reads a whole sheet in about 0.9 s and answers as the tutor in about 1 s (the first hint in 0.5 s), for $0.10 / $0.40 per million tokens in / out; a whole-sheet check with "Help me" takes about 3.5 s. Also good: `anthropic/claude-haiku-5.5` as the tutor (about 2.5 s, stronger explanations, $0.10 / $0.50); `~z-ai/glm-flash-latest` is the cheapest ($0.05 / $0.07, about 1–2 s) but follows the latest GLM Flash, so it can change. Qwen 3.7 / 3.8 Flash took 3–4 s.
 4. **Deploy**, then test it: `ENGINE=https://<your-app>.vercel.app npm run e2e`.
 
 ## Before real children use it

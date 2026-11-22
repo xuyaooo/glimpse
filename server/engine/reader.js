@@ -56,8 +56,11 @@ export function expectedSheet(vw, vh) {
   ]
 }
 
+// A cloud vision model reads the whole page the way GLM-OCR does: one line of the page per line,
+// maths in $...$. (It used to be asked for "one line", from when single lines were cut out: given
+// a whole sheet, it ran every exercise together on one line.)
 const OCR_PROMPT_GENERIC =
-  'Transcribe the handwritten maths in this image exactly as written, on one line. Write fractions as \\frac{a}{b}. Do not correct, simplify or solve anything. Output only the transcription.'
+  'Transcribe everything written on this page, top to bottom, exactly as written: one line of the page per line of your output, maths in LaTeX between $...$ (fractions as \\frac{a}{b}). Keep labels like "a)" or "3.". Do not correct, simplify or solve anything, and never add an answer that is not written. Output only the transcription.'
 
 export async function ocrImage(base64, maxTokens = 600) {
   const { model } = roleConfig('ocr')
