@@ -123,6 +123,8 @@ export interface WorkedSteps {
   /** The exercise, as LaTeX. */
   about: string
   title: string
+  /** Hints to try it alone first (a nudge first, almost the next step last); never the answer. */
+  hints?: string[]
   items: { say: string; math: string }[]
   /** The final answer, as LaTeX. */
   result: string

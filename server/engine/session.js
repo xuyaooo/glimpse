@@ -687,6 +687,8 @@ const STEPS_SCHEMA = {
   type: 'object',
   properties: {
     title: { type: 'string' },
+    // hints first: the student tries before any step is shown (never the answer in them)
+    hints: { type: 'array', items: { type: 'string' } },
     steps: { type: 'array', items: { type: 'object', properties: { say: { type: 'string' }, math: { type: 'string' } }, required: ['say', 'math'] } },
     result: { type: 'string' },
     antiderivative: { type: 'string' },
@@ -858,6 +860,7 @@ For each step:
 - "math": the line written at this step, in LaTeX (without $).
 "result": the final answer in LaTeX (without $), exact, with a decimal value when it helps (e.g. \\ln 2 \\approx 0.693).
 "title": a short title, e.g. "Step by step".
+"hints": 2 or 3 hints to the student (as "you"), so they can solve it themselves before seeing any step: the first a gentle nudge (what to notice, which rule), the last almost the next step. Short, plain text, and NEVER the final answer or a number that gives it away.
 "antiderivative": only for an integral, an antiderivative of the function in plain text (e.g. "ln(1+x)").
 "derivative": only for a derivative, the derivative function in plain text (e.g. "3x^2").
 "exercise": the exercise as written on the paper, in clean LaTeX (without $). The text comes from an OCR model that can misread symbols (S or f for the integral sign, + for 1, l for 1): ${photo ? 'check it against the photo and ' : ''}fix only such reading slips, not the student's maths.
@@ -935,9 +938,10 @@ Compute carefully and check the result before answering.`,
     return
   }
   const title = typeof out?.json?.title === 'string' && out.json.title.trim()
-  Object.assign(steps, { title: title || 'Step by step', items, result })
+  const hints = safeHints(out?.json?.hints, result || sc?.resultTex || '')
+  Object.assign(steps, { title: title || 'Step by step', items, result, hints })
   emit({ type: 'steps', steps: { ...steps } })
-  remember(s, { kind: 'steps', ref: `steps:${key}`, data: { about: steps.about, title: steps.title, result: steps.result, scene: sc ?? null, items } })
+  remember(s, { kind: 'steps', ref: `steps:${key}`, data: { about: steps.about, title: steps.title, result: steps.result, scene: sc ?? null, items, hints } })
 }
 
 // ---------- the end of a session: what happened, in a few friendly lines ----------
@@ -1292,6 +1296,28 @@ function remember(s, { kind, ref, data, at }) {
 // The line of the transcription (or two or three consecutive lines together) closest to `text`,
 // by shared letter pairs (Dice coefficient on the text without spaces, $ and numbering); null if
 // none is close enough.
+/**
+ * The tutor's hints (at most 3), without any that gives the answer away: one that holds the
+ * answer itself, or says it ("= 12", "the answer is 4"), for a short answer too.
+ */
+export function safeHints(hints, result) {
+  const flat = (t) => texToPlain(String(t ?? '').replace(/\\approx/g, '')).replace(/[\s$]/g, '').toLowerCase()
+  const whole = flat(result)
+  const value = whole.replace(/^.*=/, '') // the answer's value: what comes after its last "="
+  const esc = (t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const says = value && new RegExp(`(?:=|\\b(?:is|are|equals|makes|gives|get|gets|got)\\s+)${esc(value)}(?!\\d|[.,]\\d)`, 'i')
+  return (Array.isArray(hints) ? hints : [])
+    .map((h) => (typeof h === 'string' ? plainReply(h) : ''))
+    .filter((h) => {
+      if (!h) return false
+      const f = flat(h)
+      if (whole.length > 1 && f.includes(whole)) return false
+      if (value.length > 1 && f.includes(value)) return false
+      return !(says && (says.test(f) || says.test(texToPlain(h).toLowerCase())))
+    })
+    .slice(0, 3)
+}
+
 export function closestLine(text, lines) {
   // compared without spaces, $, numbering, dots (the model may drop a "..."), with one times sign
   const norm = (t) =>
@@ -1379,7 +1405,7 @@ async function answerPointing(s, e, emit) {
 The student points at their paper with a finger${hasTip ? ' (a red circle on the photo marks the fingertip)' : ''} and asks a question. You get the photo and the OCR transcription of the whole paper. The transcription is what is written: trust it over your own reading of the photo.
 Return:
 - "pointed": the line or exercise the finger points at, copied from the transcription (LaTeX, without $). If the finger is on part of an exercise, the whole exercise;
-- "answer": your reply to the question about it, in ${LANG_NAME[lang]}, at most 3 short sentences. Answer the question directly and concretely, with the actual maths (the rule, the next step, what it means). The full solution is shown separately, step by step. Write maths in the answer as plain text that can be read aloud (e.g. 1/(1+x), x², 3/4), not LaTeX.${lang !== 'en' ? '\n- "answer_en": the same reply in English.' : ''}`,
+- "answer": your reply to the question about it, in ${LANG_NAME[lang]}, at most 3 short sentences. Help them think it through: the idea or rule that applies here and the first step, concretely with their numbers or words, then a short question back so they try the next bit. Do NOT give the final answer: the full solution is there for them to open, step by step, when they want it. Write maths as plain text that can be read aloud (e.g. 1/(1+x), x², 3/4), not LaTeX.${lang !== 'en' ? '\n- "answer_en": the same reply in English.' : ''}`,
         },
         {
           role: 'user',
@@ -1467,7 +1493,7 @@ async function answerQuestion(s, text, partId, emit, { asked = false } = {}) {
         messages: [
           {
             role: 'system',
-            content: `You are Glim, a kind ${SUBJECT_NAME[s.subject] ?? 'maths'} tutor for children. Answer in ${LANG_NAME[lang]}, in at most 2 short, simple sentences. Explain the idea; do not just give the final answer.${lang !== 'en' ? ' Also give an English translation.' : ''}`,
+            content: `You are Glim, a kind ${SUBJECT_NAME[s.subject] ?? 'maths'} tutor for children. Answer in ${LANG_NAME[lang]}, in at most 2 short, simple sentences. Explain the idea and give a hint or the next step, then let them try: never the final answer.${lang !== 'en' ? ' Also give an English translation.' : ''}`,
           },
           { role: 'user', content: `${context}\nThe child asks: "${text}"` },
         ],

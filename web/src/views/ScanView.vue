@@ -299,6 +299,7 @@ watch(
   (n, old) => {
     if (n <= (old ?? 0)) return
     const p = state.parts[n - 1]
+    clearOldVideo() // the next line: the video of the one before goes away
     ui.selectedPartId = p.id
     if (p.crop) ui.pendingCrop = null
     else if (ui.pendingCrop) {
@@ -307,12 +308,22 @@ watch(
     }
   },
 )
+// The next question (a new line read, or the solution to another exercise) takes away the video
+// card of the one before, even while it plays; one open full screen is being watched, and stays.
+function clearOldVideo(at?: number) {
+  if (!anim.mode || anim.mode === 'full' || (at !== undefined && anim.steps?.at === at)) return
+  anim.pending = null
+  closePlayer()
+}
 // A worked solution with an animation appears as a video card on the camera, ready to play:
 // it never pops up by itself. The second message for the same solution (the tutor's written
 // steps) updates it without restarting it.
 watch(
   () => state.steps,
-  (st) => st?.scene && offer(st),
+  (st, old) => {
+    if (st && st.at !== old?.at) clearOldVideo(st.at)
+    if (st?.scene) offer(st)
+  },
 )
 function finish() {
   if (ui.summaryOpen) return // already finishing (Enter on the button behind the summary)

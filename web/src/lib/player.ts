@@ -89,7 +89,7 @@ export function offer(steps: WorkedSteps) {
     // watched, the steps on show stay as they are until it's played again.
     if (!player.mode || player.mode === 'poster' || sameStages(player.steps.scene, steps.scene)) {
       player.steps = steps
-      if (player.mode === 'poster') player.stage = steps.scene.stages.length - 1
+      if (player.mode === 'poster') player.stage = 0
       upgrade = null
     } else {
       player.steps = { ...steps, scene: player.steps.scene }
@@ -105,7 +105,7 @@ export function offer(steps: WorkedSteps) {
   player.pending = null // the newest animation wins
   upgrade = null
   told = -1
-  player.stage = steps.scene.stages.length - 1
+  player.stage = 0 // the poster shows the start, never the answer
   player.finished = false
   player.mode = 'poster'
 }

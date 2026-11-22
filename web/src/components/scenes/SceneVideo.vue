@@ -61,7 +61,7 @@ const drift = computed(() => {
     <!-- the animation -->
     <div class="relative overflow-hidden">
     <div :style="{ transform: drift, transition: 'transform 7s ease-out' }">
-      <SceneStage :key="`${steps.at}-${poster ? 'poster' : player.run}`" :scene="scene" :stage="poster ? n - 1 : player.stage" class="!rounded-none" />
+      <SceneStage :key="`${steps.at}-${poster ? 'poster' : player.run}`" :scene="scene" :stage="poster ? 0 : player.stage" class="!rounded-none" />
     </div>
     <div class="pointer-events-none absolute inset-x-0 top-0 flex justify-center"><Confetti :burst="burst" /></div>
 
